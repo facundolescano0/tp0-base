@@ -31,8 +31,8 @@ class GeneradorCompose:
     def generar_servicios(self, f, cantidad_clientes):
 
         f.write("services:\n")
-        generar_server(f)
-        generar_clientes(f, cantidad_clientes)
+        self.generar_server(f)
+        self.generar_clientes(f, cantidad_clientes)
 
 
     def generar_redes(self, f):
