@@ -17,12 +17,13 @@ class GeneradorCompose:
 
     def generar_clientes(self, f, cantidad_clientes):
         for i in range(cantidad_clientes):
-            f.write(f"  cliente_{i}:\n")
-            f.write(f"    container_name: cliente_{i}\n")
+            i_actual = i + 1
+            f.write(f"  cliente{i_actual}:\n")
+            f.write(f"    container_name: cliente_{i_actual}\n")
             f.write(f"    image: cliente:latest\n")
             f.write(f"    entrypoint: /client\n")
             f.write(f"    environment:\n")
-            f.write(f"      - CLI_ID={i}\n")
+            f.write(f"      - CLI_ID={i_actual}\n")
             f.write(f"      - CLI_LOG_LEVEL=DEBUG\n")
             f.write(f"    networks:\n")
             f.write(f"      - testing_net\n")
