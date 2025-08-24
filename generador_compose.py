@@ -13,6 +13,7 @@ class GeneradorCompose:
         f.write("      - LOGGING_LEVEL=DEBUG\n")
         f.write("    networks:\n")
         f.write("      - testing_net\n")
+        f.write("\n")
 
     def generar_clientes(self, f, cantidad_clientes):
         for i in range(cantidad_clientes):
@@ -27,6 +28,7 @@ class GeneradorCompose:
             f.write(f"      - testing_net\n")
             f.write(f"    depends_on:\n")
             f.write(f"      - server\n")
+            f.write("\n")
 
     def generar_servicios(self, f, cantidad_clientes):
 
@@ -42,6 +44,7 @@ class GeneradorCompose:
         f.write(f"        driver: default\n")
         f.write(f"        config:\n")
         f.write(f"          - subnet: 172.25.125.0/24\n")
+        f.write("\n")
 
 
     def generar_compose(self, nombre_archivo, cantidad_clientes):
