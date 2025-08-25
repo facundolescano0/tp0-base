@@ -19,7 +19,7 @@ class GeneradorCompose:
         for i in range(cantidad_clientes):
             i_actual = i + 1
             f.write(f"  cliente{i_actual}:\n")
-            f.write(f"    container_name: cliente_{i_actual}\n")
+            f.write(f"    container_name: cliente{i_actual}\n")
             f.write(f"    image: cliente:latest\n")
             f.write(f"    entrypoint: /client\n")
             f.write(f"    environment:\n")
@@ -39,12 +39,12 @@ class GeneradorCompose:
 
 
     def generar_redes(self, f):
-        f.write(f"  networks:\n")
-        f.write(f"    testing_net:\n")
-        f.write(f"      ipam:\n")
-        f.write(f"        driver: default\n")
-        f.write(f"        config:\n")
-        f.write(f"          - subnet: 172.25.125.0/24\n")
+        f.write(f"networks:\n")
+        f.write(f"  testing_net:\n")
+        f.write(f"    ipam:\n")
+        f.write(f"      driver: default\n")
+        f.write(f"      config:\n")
+        f.write(f"        - subnet: 172.25.125.0/24\n")
         f.write("\n")
 
 
