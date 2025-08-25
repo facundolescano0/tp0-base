@@ -18,9 +18,9 @@ class GeneradorCompose:
     def generar_clientes(self, f, cantidad_clientes):
         for i in range(cantidad_clientes):
             i_actual = i + 1
-            f.write(f"  cliente{i_actual}:\n")
-            f.write(f"    container_name: cliente{i_actual}\n")
-            f.write(f"    image: cliente:latest\n")
+            f.write(f"  client{i_actual}:\n")
+            f.write(f"    container_name: client{i_actual}\n")
+            f.write(f"    image: client:latest\n")
             f.write(f"    entrypoint: /client\n")
             f.write(f"    environment:\n")
             f.write(f"      - CLI_ID={i_actual}\n")
@@ -45,7 +45,6 @@ class GeneradorCompose:
         f.write(f"      driver: default\n")
         f.write(f"      config:\n")
         f.write(f"        - subnet: 172.25.125.0/24\n")
-        f.write("\n")
 
 
     def generar_compose(self, nombre_archivo, cantidad_clientes):
