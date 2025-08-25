@@ -32,7 +32,7 @@ class GeneradorCompose:
             f.write(f"    depends_on:\n")
             f.write(f"      - server\n")
             f.write(f"    volumes:\n")
-            f.write(f"      - ./client/config.yaml:/app/config.yaml\n")
+            f.write(f"      - ./client{i_actual}/config.yaml:/app/config.yaml\n")
             f.write("\n")
 
     def generar_servicios(self, f, cantidad_clientes):
@@ -57,6 +57,16 @@ class GeneradorCompose:
             self.generar_servicios(f, cantidad_clientes)
             self.generar_redes(f)
         f.close()
+
+    def generar_config_volumes(self, f, cantidad_clientes):
+        f.write("volumes:\n")
+        f.write("  ./server/config.ini:\n")
+        f.write("    external: true\n")
+        for i in range(cantidad_clientes):
+            f.write(f"  ./client{i + 1}/config.yaml:\n")
+            f.write(f"    external: true\n")
+            
+        f.write("\n")
 
 if __name__ == "__main__":
     import sys
