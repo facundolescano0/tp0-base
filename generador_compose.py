@@ -63,7 +63,7 @@ class GeneradorCompose:
         f.write("  ./server/config.ini:\n")
         f.write("    external: true\n")
         for i in range(cantidad_clientes):
-            f.write(f"  ./client{i + 1}/config.yaml:\n")
+            f.write(f"  ./client/config.yaml:\n")
             f.write(f"    external: true\n")
             
         f.write("\n")
