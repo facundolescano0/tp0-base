@@ -32,7 +32,7 @@ class GeneradorCompose:
             f.write(f"    depends_on:\n")
             f.write(f"      - server\n")
             f.write(f"    volumes:\n")
-            f.write(f"      - ./client{i_actual}/config.yaml:/app/config.yaml\n")
+            f.write(f"      - ./client/config.yaml:/app/config.yaml\n")
             f.write("\n")
 
     def generar_servicios(self, f, cantidad_clientes):
