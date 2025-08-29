@@ -13,7 +13,7 @@ class Server:
         self._keep_running = True
 
     def handle_sigterm(self, signum, frame):
-        logging.info("action: server_shutdown | result: success (SIGTERM)")
+        logging.info("action: server_shutdown | result: success ")
         self._server_socket.shutdown(socket.SHUT_RDWR)
         self._server_socket.close()
         self._keep_running = False
