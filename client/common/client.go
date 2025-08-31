@@ -5,9 +5,6 @@ import (
 	"fmt"
 	"net"
 	"time"
-	"os"
-    "os/signal"
-    "syscall"
 
 	"github.com/op/go-logging"
 )
@@ -24,8 +21,9 @@ type ClientConfig struct {
 
 // Client Entity that encapsulates how
 type Client struct {
-	config ClientConfig
-	conn   net.Conn
+	config        ClientConfig
+	conn          net.Conn
+	_keep_running bool
 }
 
 // NewClient Initializes a new client receiving the configuration
@@ -33,6 +31,7 @@ type Client struct {
 func NewClient(config ClientConfig) *Client {
 	client := &Client{
 		config: config,
+		_keep_running: true,
 	}
 	return client
 }
@@ -54,23 +53,17 @@ func (c *Client) createClientSocket() error {
 }
 
 // StartClientLoop Send messages to the client until some time threshold is met
-func (c *Client) StartClientLoop() {
-	sigs := make(chan os.Signal, 1)
-    signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT)
-    done := make(chan bool, 1)
-
-	go func() {
-		<-sigs
-		log.Infof("action: shutdown | result: success | client_id: %v", c.config.ID)
-		done <- true
-	}()
-
+func (c *Client) StartClientLoop(done <-chan bool) {
 	// There is an autoincremental msgID to identify every message sent
 	// Messages if the message amount threshold has not been surpassed
-	for msgID := 1; msgID <= c.config.LoopAmount; msgID++ {
+	for msgID := 1; msgID <= c.config.LoopAmount || !c._keep_running; msgID++ {
+		if !c._keep_running {
+			break
+		}
 		select {
 		case <-done:
-			c.conn.Close()
+			log.Infof("action: shutdown | result: success | client_id: %v", c.config.ID)
+			c.Shutdown()
 			return
 		default:
 			// Create the connection the server in every loop iteration. Send an
@@ -105,4 +98,11 @@ func (c *Client) StartClientLoop() {
 		}
 	}
 	log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
+}
+
+func (c *Client) Shutdown() {
+	c._keep_running = false
+	if c.conn != nil {
+		c.conn.Close()
+	}
 }

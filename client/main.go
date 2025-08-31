@@ -5,6 +5,8 @@ import (
 	"os"
 	"strings"
 	"time"
+    "os/signal"
+    "syscall"
 
 	"github.com/op/go-logging"
 	"github.com/pkg/errors"
@@ -100,6 +102,15 @@ func main() {
 		log.Criticalf("%s", err)
 	}
 
+	sigs := make(chan os.Signal, 1)
+    signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT)
+    done := make(chan bool, 1)
+
+	go func() {
+		<-sigs
+		done <- true
+	}()
+
 	// Print program config with debugging purposes
 	PrintConfig(v)
 
@@ -111,5 +122,5 @@ func main() {
 	}
 
 	client := common.NewClient(clientConfig)
-	client.StartClientLoop()
+	client.StartClientLoop(done)
 }
