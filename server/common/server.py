@@ -1,6 +1,5 @@
 import socket
 import logging
-import signal
 import errno
 
 from .server_protocol import ServerProtocol
@@ -14,12 +13,6 @@ class Server:
         self._server_socket.listen(listen_backlog)
         self._keep_running = True
 
-    def handle_sigterm(self, signum, frame):
-        logging.info("action: server_shutdown | result: success ")
-        self._server_socket.shutdown(socket.SHUT_RDWR)
-        self._server_socket.close()
-        self._keep_running = False
-
     def run(self):
         """
         Dummy Server loop
@@ -29,7 +22,6 @@ class Server:
         finishes, servers starts to accept new connections again
         """
 
-        signal.signal(signal.SIGTERM, self.handle_sigterm)
         while self._keep_running:
             try:
                 client_sock = self.__accept_new_connection()
@@ -87,3 +79,8 @@ class Server:
         c, addr = self._server_socket.accept()
         logging.info(f'action: accept_connections | result: success | ip: {addr[0]}')
         return c
+
+    def shutdown(self):
+        self._keep_running = False
+        self._server_socket.shutdown(socket.SHUT_RDWR)
+        self._server_socket.close()

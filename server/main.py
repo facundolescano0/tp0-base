@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from configparser import ConfigParser
+import signal
 from common.server import Server
 import logging
 import os
@@ -34,7 +35,6 @@ def initialize_config():
 
     return config_params
 
-
 def main():
     config_params = initialize_config()
     logging_level = config_params["logging_level"]
@@ -42,6 +42,10 @@ def main():
     listen_backlog = config_params["listen_backlog"]
 
     initialize_log(logging_level)
+    
+    def handle_sigterm(signum, frame):
+        logging.info("action: server_shutdown | result: success ")
+        server.shutdown()
 
     # Log config parameters at the beginning of the program to verify the configuration
     # of the component
@@ -50,6 +54,7 @@ def main():
 
     # Initialize server and start server loop
     server = Server(port, listen_backlog)
+    signal.signal(signal.SIGTERM, handle_sigterm)
     server.run()
 
 def initialize_log(logging_level):
