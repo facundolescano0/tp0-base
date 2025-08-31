@@ -3,6 +3,8 @@ import logging
 import signal
 import errno
 
+from .server_protocol import ServerProtocol
+from .utils import store_bets, Bet
 
 class Server:
     def __init__(self, port, listen_backlog):
@@ -32,13 +34,24 @@ class Server:
             try:
                 client_sock = self.__accept_new_connection()
                 if client_sock:
-                    self.__handle_client_connection(client_sock)
+                    server_protocol = ServerProtocol(client_sock)
+                    self.__handle_client_connection(server_protocol)
             except OSError as e:
                 if e.errno == errno.EBADF:
                     break
                 raise
 
-    def __handle_client_connection(self, client_sock):
+    def recv_bet(self, server_protocol):
+        if campos := server_protocol.recv_bet():
+            return campos
+        logging.error("action: receive_message | result: fail | error: formato de mensaje incorrecto")
+        return None
+
+    def send_response_bet(self, server_protocol, nid, number):
+        server_protocol.send_response(nid, number)
+        
+
+    def __handle_client_connection(self, server_protocol):
         """
         Read message from a specific client socket and closes the socket
 
@@ -47,15 +60,19 @@ class Server:
         """
         try:
             # TODO: Modify the receive to avoid short-reads
-            msg = client_sock.recv(1024).rstrip().decode('utf-8')
-            addr = client_sock.getpeername()
-            logging.info(f'action: receive_message | result: success | ip: {addr[0]} | msg: {msg}')
+            id, name, lastname, nid, birth, number = self.recv_bet(server_protocol)
+
+            bet = Bet(agency=id, first_name=name, last_name=lastname, document=nid, birthdate=birth, number=number)
+            store_bets([bet])
+            logging.info(f'action: apuesta_almacenada | result: success | dni: {nid} | numero: {number}')
+            
             # TODO: Modify the send to avoid short-writes
-            client_sock.send("{}\n".format(msg).encode('utf-8'))
+            self.send_response_bet(server_protocol, nid, number)
+
         except OSError as e:
             logging.error("action: receive_message | result: fail | error: {e}")
         finally:
-            client_sock.close()
+            server_protocol.close()
 
     def __accept_new_connection(self):
         """
