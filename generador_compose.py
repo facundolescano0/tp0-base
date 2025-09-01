@@ -36,6 +36,7 @@ class GeneradorCompose:
             f.write(f"      - server\n")
             f.write(f"    volumes:\n")
             f.write(f"      - ./client/config.yaml:/config.yaml\n")
+            f.write(f"      - .data/agency-{i_actual}.csv:/agency-{i_actual}.csv\n")
             f.write("\n")
 
     def generar_servicios(self, f, cantidad_clientes):
