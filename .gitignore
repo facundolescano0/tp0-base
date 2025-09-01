@@ -3,3 +3,9 @@
 
 # Executables
 bin/
+
+.data/agency-1.csv
+.data/agency-2.csv
+.data/agency-3.csv
+.data/agency-4.csv
+.data/agency-5.csv
