@@ -3,9 +3,10 @@ package common
 import (
 	"net"
 	"time"
-	"encoding/csv"
-	"io"
 	"os"
+	"strings"
+	"fmt"
+	"bufio"
 
 	"github.com/op/go-logging"
 )
@@ -66,42 +67,6 @@ func NewClient(config ClientConfig) *Client {
 }
 
 
-func (c *Client) LoadBetsFromFile(path string) ([]Bet, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	reader := csv.NewReader(file)
-	var bets []Bet
-	for {
-		record, err := reader.Read()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, err
-		}
-		if len(record) != 5 {
-			log.Errorf("action: load_bets | result: fail | client_id: %v | error: carga de archivo",
-				c.config.ID,
-			)
-			continue
-		}
-		bet := Bet{
-			Agency:    c.config.ID,
-			FirstName: record[FirstNameIdx],
-			LastName:  record[LastNameIdx],
-			Document:  record[DocumentIdx],
-			Birthdate: record[BirthdateIdx],
-			Number:    record[NumberIdx],
-		}
-		bets = append(bets, bet)
-	}
-	return bets, nil
-}
-
 // CreateClientSocket Initializes client socket. In case of
 // failure, error is printed in stdout/stderr and exit 1
 // is returned
@@ -128,36 +93,6 @@ func (c *Client) sendBet(){
 		Number:     c.config.Number,
 	}
 	c.clientProtocol.sendBet(bet)
-}
-
-func (c *Client)SplitBetsInBatches(bets []Bet, maxAmount int, maxBytes int) [][]Bet {
-	var batches [][]Bet
-	var currentBatch []Bet
-	currentBatchBytes := 0
-
-	for _, bet := range bets {
-		betStr := c.clientProtocol.serializeBet(bet)
-		betBytes := len(betStr)
-
-		headerBytes := len(c.clientProtocol.serializeHeader(len(currentBatch) + 1))
-		totalBytes := headerBytes + currentBatchBytes + betBytes
-
-		if len(currentBatch) >= maxAmount || totalBytes > maxBytes {
-			if len(currentBatch) > 0 {
-				batches = append(batches, currentBatch)
-			}
-			currentBatch = []Bet{}
-			currentBatchBytes = 0
-		}
-
-		currentBatch = append(currentBatch, bet)
-		currentBatchBytes += betBytes
-	}
-
-	if len(currentBatch) > 0 {
-		batches = append(batches, currentBatch)
-	}
-	return batches
 }
 
 func (c *Client) sendBatch(batch []Bet) error {
@@ -192,18 +127,65 @@ func (c *Client) try_connect(max_retries int) {
 		}
 	}
 }
+func (c *Client) splitBet(line string) (Bet, error) {
+	record := strings.Split(line, ",")
+	
+	if len(record) != 5 {
+		log.Errorf("action: load_bets | result: fail | client_id: %v | error: carga de archivo",
+			c.config.ID,
+		)
+		return Bet{}, fmt.Errorf("invalid record length")
+	}
+	bet := Bet{
+		Agency:    c.config.ID,
+		FirstName: record[FirstNameIdx],
+		LastName:  record[LastNameIdx],
+		Document:  record[DocumentIdx],
+		Birthdate: record[BirthdateIdx],
+		Number:    record[NumberIdx],
+	}
+	return bet, nil
+}
+
+func (c *Client) LoadBatchfromfile(scanner *bufio.Scanner, lastBet Bet) ([]Bet, Bet, error) {
+	var batch []Bet
+	batchBytes := 0
+	if lastBet != (Bet{}) {
+		batch = append(batch, lastBet)
+		batchBytes += len(c.clientProtocol.serializeBet(lastBet))
+	}
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line == "EOF" {
+			break
+		}
+		bet, err := c.splitBet(line)
+		if err != nil {
+			log.Errorf("action: load_bets | result: fail | client_id: %v | error: %v",
+				c.config.ID,
+				err,
+			)
+			return nil, Bet{}, fmt.Errorf("failed to split bet: %v", err)
+		}
+		betStr := c.clientProtocol.serializeBet(bet)
+		betBytes := len(betStr)
+
+		headerBytes := len(c.clientProtocol.serializeHeader(len(batch) + 1))
+		totalBytes := headerBytes + batchBytes + betBytes
+
+		if len(batch) >= c.config.BatchAmount || totalBytes > c.MaxBytesPerBatch {
+			return batch, bet, nil
+		}
+
+		batch = append(batch, bet)
+		batchBytes += betBytes
+	}
+	return batch, Bet{}, nil
+}
 
 // StartClientLoop Send messages to the client until some time threshold is met
 func (c *Client) StartClientLoop(done <-chan bool) {
-
-	bets, err := c.LoadBetsFromFile(c.config.AgencyPath)
-	if err != nil {
-		log.Errorf("action: load_bets | result: fail | client_id: %v | error: %v",
-			c.config.ID,
-			err,
-		)
-		return
-	}
 
 	max_retries := 5
 	c.try_connect(max_retries)
@@ -215,10 +197,22 @@ func (c *Client) StartClientLoop(done <-chan bool) {
 		return
 	}
 
-	batches := c.SplitBetsInBatches(bets, c.config.BatchAmount, c.MaxBytesPerBatch)
+	file, err := os.Open(c.config.AgencyPath)
+    if err != nil {
+        fmt.Printf("Error opening file: %v\n", err)
+        return
+    }
+    defer file.Close() 
 
-	for _, batch := range batches {
-		if !c.keepRunning {
+    scanner := bufio.NewScanner(file)
+	last_bet := Bet{}
+
+	// batches := c.SplitBetsInBatches(bets, c.config.BatchAmount, c.MaxBytesPerBatch)
+	for c.keepRunning {
+
+		batch, last_bet, err := c.LoadBatchfromfile(scanner, last_bet)
+		_ = last_bet
+		if batch == nil {
 			break
 		}
 		select {
