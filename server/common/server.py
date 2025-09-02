@@ -6,6 +6,12 @@ from .server_protocol import ServerProtocol
 from .utils import store_bets, Bet
 
 class Server:
+    IDX_AGENCY = 0
+    IDX_FIRST_NAME = 1
+    IDX_LAST_NAME = 2
+    IDX_DOCUMENT = 3
+    IDX_BIRTHDATE = 4
+    IDX_NUMBER = 5
     def __init__(self, port, listen_backlog):
         # Initialize server socket
         self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -26,7 +32,7 @@ class Server:
             try:
                 client_sock = self.__accept_new_connection()
                 if client_sock:
-                    server_protocol = ServerProtocol(client_sock)
+                    server_protocol = ServerProtocol(client_sock, max_length=8192)
                     self.__handle_client_connection(server_protocol)
             except OSError as e:
                 if e.errno == errno.EBADF:
@@ -50,10 +56,16 @@ class Server:
     def store_batch(self, batch):
         stored_count = 0
         for bet in batch:
-            bet = Bet(agency=bet[0], first_name=bet[1], last_name=bet[2],
-                    document=bet[3], birthdate=bet[4], number=bet[5])
+            bet_obj = Bet(
+                agency=bet[self.IDX_AGENCY],
+                first_name=bet[self.IDX_FIRST_NAME],
+                last_name=bet[self.IDX_LAST_NAME],
+                document=bet[self.IDX_DOCUMENT],
+                birthdate=bet[self.IDX_BIRTHDATE],
+                number=bet[self.IDX_NUMBER]
+            )
             try:
-                store_bets([bet])
+                store_bets([bet_obj])
                 stored_count += 1
             except Exception as e:
                 logging.error(f"action: store_batch | result: fail | error: {e}")

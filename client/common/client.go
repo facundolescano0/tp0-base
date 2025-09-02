@@ -10,6 +10,14 @@ import (
 	"github.com/op/go-logging"
 )
 
+const (
+    FirstNameIdx = iota
+    LastNameIdx
+    DocumentIdx
+    BirthdateIdx
+    NumberIdx
+)
+
 var log = logging.MustGetLogger("log")
 
 type Bet struct {
@@ -83,11 +91,11 @@ func (c *Client) LoadBetsFromFile(path string) ([]Bet, error) {
 		}
 		bet := Bet{
 			Agency:    c.config.ID,
-			FirstName: record[0],
-			LastName:  record[1],
-			Document:  record[2],
-			Birthdate: record[3],
-			Number:    record[4],
+			FirstName: record[FirstNameIdx],
+			LastName:  record[LastNameIdx],
+			Document:  record[DocumentIdx],
+			Birthdate: record[BirthdateIdx],
+			Number:    record[NumberIdx],
 		}
 		bets = append(bets, bet)
 	}
@@ -175,6 +183,16 @@ func (c *Client) recvResponseBet() {
 	)
 }
 
+func (c *Client) try_connect(max_retries int) {
+	for i := 0; i < max_retries; i++ {
+		c.createClientSocket()
+		if c.conn != nil {
+			c.clientProtocol = NewClientProtocol(c.conn, c.MaxBytesPerBatch)
+			break
+		}
+	}
+}
+
 // StartClientLoop Send messages to the client until some time threshold is met
 func (c *Client) StartClientLoop(done <-chan bool) {
 
@@ -186,14 +204,9 @@ func (c *Client) StartClientLoop(done <-chan bool) {
 		)
 		return
 	}
-	max_retries := 5
-	for i := 0; i < max_retries; i++ {
-		c.createClientSocket()
-		if c.conn != nil {
-			c.clientProtocol = NewClientProtocol(c.conn)
-			break
-		}
-	}
+
+	c.try_connect(max_retries=5)
+
 	if c.conn == nil {
 		log.Errorf("action: connect | result: fail | client_id: %v | error: no se pudo conectar",
 			c.config.ID,

@@ -11,9 +11,10 @@ type ClientProtocol struct {
 	conn   net.Conn
 }
 
-func NewClientProtocol(conn net.Conn) *ClientProtocol {
+func NewClientProtocol(conn net.Conn, maxLength int) *ClientProtocol {
 	clientProtocol := &ClientProtocol{
 		conn: conn,
+		maxLength: maxLength,
 	}
 	return clientProtocol
 }
@@ -49,6 +50,9 @@ func (cp *ClientProtocol) sendBatch(batch []Bet) error {
 	message := header
 	for _, bet := range batch {
 		message += cp.serializeBet(bet)
+	}
+	if len(message) > cp.maxLength {
+		return fmt.Errorf("message too long")
 	}
 	return cp.sendAllMessage(message)
 }

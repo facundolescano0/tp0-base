@@ -2,14 +2,15 @@ import socket
 
 
 class ServerProtocol:
-    def __init__(self, client_sock):
+    HEADER = 0
+    def __init__(self, client_sock, max_length):
         self.client_sock = client_sock
-    
+        self.max_length = max_length
+
     def recv_all(self):
-        max_length = 8192
         buffer = b""
         while True:
-            chunk = self.client_sock.recv(max_length-len(buffer))
+            chunk = self.client_sock.recv(self.max_length-len(buffer))
             if not chunk:
                 break 
             buffer += chunk
@@ -26,7 +27,7 @@ class ServerProtocol:
         else:
             return None
 
-    def send_response(self, nid, number):
+    def send_response_bet(self, nid, number):
         response = f"{nid}|{number}\n"
         self.client_sock.sendall(response.encode('utf-8'))
 
@@ -37,7 +38,7 @@ class ServerProtocol:
         lines = data.splitlines()
         if not lines:
             return None
-        header = lines[0]
+        header = lines[ServerProtocol.HEADER]
 
         try:
             bet_count = int(header.strip())
