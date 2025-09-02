@@ -3,7 +3,10 @@ package common
 import (
 	"net"
 	"time"
-
+	"encoding/csv"
+	"io"
+	"os"
+	
 	"github.com/op/go-logging"
 )
 
@@ -30,6 +33,7 @@ type ClientConfig struct {
 	NID           string
 	Birth         string
 	Number        string
+	AgencyPath    string
 }
 
 
@@ -37,7 +41,9 @@ type ClientConfig struct {
 type Client struct {
 	config        ClientConfig
 	conn          net.Conn
-	_keep_running bool
+	keepRunning   bool
+	clientProtocol *ClientProtocol
+	MaxBytesPerBatch int
 }
 
 // NewClient Initializes a new client receiving the configuration
@@ -45,9 +51,47 @@ type Client struct {
 func NewClient(config ClientConfig) *Client {
 	client := &Client{
 		config: config,
-		_keep_running: true,
+		keepRunning: true,
+		MaxBytesPerBatch: 8192,
 	}
 	return client
+}
+
+
+func (c *Client) LoadBetsFromFile(path string) ([]Bet, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	reader := csv.NewReader(file)
+	var bets []Bet
+	for {
+		record, err := reader.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		if len(record) != 5 {
+			log.Errorf("action: load_bets | result: fail | client_id: %v | error: carga de archivo",
+				c.config.ID,
+			)
+			continue
+		}
+		bet := Bet{
+			Agency:    c.config.ID,
+			FirstName: record[0],
+			LastName:  record[1],
+			Document:  record[2],
+			Birthdate: record[3],
+			Number:    record[4],
+		}
+		bets = append(bets, bet)
+	}
+	return bets, nil
 }
 
 // CreateClientSocket Initializes client socket. In case of
@@ -66,8 +110,7 @@ func (c *Client) createClientSocket() error {
 	return nil
 }
 
-func (c *Client) send_bet(client_protocol *ClientProtocol){
-	// self, agency: str, first_name: str, last_name: str, document: str, birthdate: str, number: str
+func (c *Client) sendBet(){
 	bet := Bet{
 		Agency:     c.config.ID,
 		FirstName:  c.config.Name,
@@ -76,11 +119,49 @@ func (c *Client) send_bet(client_protocol *ClientProtocol){
 		Birthdate:  c.config.Birth,
 		Number:     c.config.Number,
 	}
-	client_protocol.send_bet(bet)
+	c.clientProtocol.sendBet(bet)
 }
 
-func (c *Client) recv_response_bet(client_protocol *ClientProtocol) {
-	nid, number, err := client_protocol.recv_response_bet()
+func (c *Client)SplitBetsInBatches(bets []Bet, maxAmount int, maxBytes int) [][]Bet {
+	var batches [][]Bet
+	var currentBatch []Bet
+	currentBatchBytes := 0
+
+	for _, bet := range bets {
+		betStr := c.clientProtocol.serializeBet(bet)
+		betBytes := len(betStr)
+
+		headerBytes := len(c.clientProtocol.serializeHeader(len(currentBatch) + 1))
+		totalBytes := headerBytes + currentBatchBytes + betBytes
+
+		if len(currentBatch) >= maxAmount || totalBytes > maxBytes {
+			if len(currentBatch) > 0 {
+				batches = append(batches, currentBatch)
+			}
+			currentBatch = []Bet{}
+			currentBatchBytes = 0
+		}
+
+		currentBatch = append(currentBatch, bet)
+		currentBatchBytes += betBytes
+	}
+
+	if len(currentBatch) > 0 {
+		batches = append(batches, currentBatch)
+	}
+	return batches
+}
+
+func (c *Client) sendBatch(batch []Bet) error {
+	return c.clientProtocol.sendBatch(batch)
+}
+
+func (c *Client) recvResponseBatch() (string, error) {
+	return c.clientProtocol.recvResponseBatch()
+}
+
+func (c *Client) recvResponseBet() {
+	nid, number, err := c.clientProtocol.recvResponseBet()
 	if err!= nil {
 		log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v",
 				c.config.ID,
@@ -96,10 +177,34 @@ func (c *Client) recv_response_bet(client_protocol *ClientProtocol) {
 
 // StartClientLoop Send messages to the client until some time threshold is met
 func (c *Client) StartClientLoop(done <-chan bool) {
-	// There is an autoincremental msgID to identify every message sent
-	// Messages if the message amount threshold has not been surpassed
-	for msgID := 1; msgID <= c.config.LoopAmount || !c._keep_running; msgID++ {
-		if !c._keep_running {
+
+	bets, err := c.LoadBetsFromFile(c.config.AgencyPath)
+	if err != nil {
+		log.Errorf("action: load_bets | result: fail | client_id: %v | error: %v",
+			c.config.ID,
+			err,
+		)
+		return
+	}
+	max_retries := 5
+	for i := 0; i < max_retries; i++ {
+		c.createClientSocket()
+		if c.conn != nil {
+			c.clientProtocol = NewClientProtocol(c.conn)
+			break
+		}
+	}
+	if c.conn == nil {
+		log.Errorf("action: connect | result: fail | client_id: %v | error: no se pudo conectar",
+			c.config.ID,
+		)
+		return
+	}
+
+	batches := c.SplitBetsInBatches(bets, c.config.BatchAmount, c.MaxBytesPerBatch)
+
+	for _, batch := range batches {
+		if !c.keepRunning {
 			break
 		}
 		select {
@@ -108,25 +213,40 @@ func (c *Client) StartClientLoop(done <-chan bool) {
 			c.Shutdown()
 			return
 		default:
-			// Create the connection the server in every loop iteration. Send an
-			c.createClientSocket()
-			client_protocol := NewClientProtocol(c.conn)
-
-			// TODO: Modify the send to avoid short-write
-			c.send_bet(client_protocol)
-
-			c.recv_response_bet(client_protocol)
-
+			
+			err = c.sendBatch(batch)
+			if err != nil {
+				log.Errorf("action: send_message | result: fail | client_id: %v | error: %v",
+					c.config.ID,
+					err,
+				)
+				c.keepRunning = false
+				break
+			}
+			response, err := c.recvResponseBatch()
+			if err != nil {
+				log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v",
+					c.config.ID,
+					err,
+				)
+				c.keepRunning = false
+				break
+			}
+			log.Infof("action: receive_message | result: %v | client_id: %v",
+			response,
+			c.config.ID,
+			)
 			// Wait a time between sending one message and the next one
-			time.Sleep(c.config.LoopPeriod)
-	
+			// time.Sleep(c.config.LoopPeriod)
 		}
 	}
+	
 	log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
+	c.Shutdown()
 }
 
 func (c *Client) Shutdown() {
-	c._keep_running = false
+	c.keepRunning = false
 	if c.conn != nil {
 		c.conn.Close()
 	}

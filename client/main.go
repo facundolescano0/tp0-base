@@ -121,9 +121,10 @@ func main() {
 	// Print program config with debugging purposes
 	PrintConfig(v)
 
+	id := v.GetString("id")
 	clientConfig := common.ClientConfig{
 		ServerAddress: v.GetString("server.address"),
-		ID:            v.GetString("id"),
+		ID:            id,
 		LoopAmount:    v.GetInt("loop.amount"),
 		LoopPeriod:    v.GetDuration("loop.period"),
 		BatchAmount:   v.GetInt("batch.maxAmount"),
@@ -132,8 +133,10 @@ func main() {
 		NID:           v.GetString("nid"),
 		Birth:         v.GetString("birth"),
 		Number:        v.GetString("number"),
+		AgencyPath:    fmt.Sprintf("/agency-%s.csv", id),
 	}
 
 	client := common.NewClient(clientConfig)
 	client.StartClientLoop(done)
+	log.Infof("action: client_shutdown post client loop | result: success | client_id: %v", clientConfig.ID)
 }

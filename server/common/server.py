@@ -41,7 +41,32 @@ class Server:
 
     def send_response_bet(self, server_protocol, nid, number):
         server_protocol.send_response(nid, number)
-        
+
+    def recv_batch(self, server_protocol):
+        if batch := server_protocol.recv_batch():
+            return batch
+        return None
+
+    def store_batch(self, batch):
+        stored_count = 0
+        for bet in batch:
+            bet = Bet(agency=bet[0], first_name=bet[1], last_name=bet[2],
+                    document=bet[3], birthdate=bet[4], number=bet[5])
+            try:
+                store_bets([bet])
+                stored_count += 1
+            except Exception as e:
+                logging.error(f"action: store_batch | result: fail | error: {e}")
+        logging.info(f"action: store_batch | result: success | cantidad: {stored_count}")
+        return stored_count
+
+    def send_response_batch(self, server_protocol, stored_count, amount_of_bets):
+        if stored_count == amount_of_bets:
+            logging.info(f"action: send_response_batch | result: success | cantidad: {stored_count}")
+            server_protocol.send_response_batch("success")
+        else:
+            logging.info(f"action: send_response_batch | result: fail | cantidad: {stored_count} vs {amount_of_bets}")
+            server_protocol.send_response_batch("fail")
 
     def __handle_client_connection(self, server_protocol):
         """
@@ -51,15 +76,19 @@ class Server:
         client socket will also be closed
         """
         try:
-            # TODO: Modify the receive to avoid short-reads
-            id, name, lastname, nid, birth, number = self.recv_bet(server_protocol)
-
-            bet = Bet(agency=id, first_name=name, last_name=lastname, document=nid, birthdate=birth, number=number)
-            store_bets([bet])
-            logging.info(f'action: apuesta_almacenada | result: success | dni: {nid} | numero: {number}')
-            
-            # TODO: Modify the send to avoid short-writes
-            self.send_response_bet(server_protocol, nid, number)
+            while self._keep_running:
+                batch = self.recv_batch(server_protocol)
+                if not batch:
+                    logging.info(f"action: receive_message | result: fail | cliente terminó / cerró socket")
+                    break
+                logging.info(f"recibí batch de tamaño {len(batch)}")
+                amount_of_bets = len(batch)
+                stored_count = self.store_batch(batch)
+                if stored_count == amount_of_bets:
+                    logging.info(f"action: apuesta_recibida | result: success | cantidad: {stored_count}")
+                else:
+                    logging.info(f"action: apuesta_recibida | result: fail | cantidad: {stored_count} vs {amount_of_bets}")
+                self.send_response_batch(server_protocol, stored_count, amount_of_bets)
 
         except OSError as e:
             logging.error("action: receive_message | result: fail | error: {e}")
