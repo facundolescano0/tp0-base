@@ -64,5 +64,4 @@ class ServerProtocol:
         
 
     def close(self):
-        self.client_sock.shutdown(socket.SHUT_RDWR)
         self.client_sock.close()
