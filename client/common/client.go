@@ -236,8 +236,8 @@ func (c *Client) StartClientLoop(done <-chan bool) {
 				c.keepRunning = false
 				break
 			}
-			// response, err := c.recvResponseBatch()
-			_, err := c.recvResponseBatch()
+			 response, err := c.recvResponseBatch()
+			//_, err := c.recvResponseBatch()
 			if err != nil {
 				log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v",
 					c.config.ID,
@@ -246,10 +246,10 @@ func (c *Client) StartClientLoop(done <-chan bool) {
 				c.keepRunning = false
 				break
 			}
-			// log.Infof("action: receive_message | result: %v | client_id: %v",
-			// response,
-			// c.config.ID,
-			// )
+			log.Infof("action: receive_message | result: %v | client_id: %v",
+			response,
+			c.config.ID,
+			)
 			// Wait a time between sending one message and the next one
 			time.Sleep(c.config.LoopPeriod)
 		}
