@@ -36,7 +36,7 @@ type ClientConfig struct {
 type Client struct {
 	config        ClientConfig
 	conn          net.Conn
-	_keep_running bool
+	keepRunning   bool
 }
 
 // NewClient Initializes a new client receiving the configuration
@@ -44,7 +44,7 @@ type Client struct {
 func NewClient(config ClientConfig) *Client {
 	client := &Client{
 		config: config,
-		_keep_running: true,
+		keepRunning: true,
 	}
 	return client
 }
@@ -65,7 +65,7 @@ func (c *Client) createClientSocket() error {
 	return nil
 }
 
-func (c *Client) send_bet(client_protocol *ClientProtocol){
+func (c *Client) sendBet(client_protocol *ClientProtocol){
 	// self, agency: str, first_name: str, last_name: str, document: str, birthdate: str, number: str
 	bet := Bet{
 		Agency:     c.config.ID,
@@ -75,11 +75,11 @@ func (c *Client) send_bet(client_protocol *ClientProtocol){
 		Birthdate:  c.config.Birth,
 		Number:     c.config.Number,
 	}
-	client_protocol.send_bet(bet)
+	client_protocol.sendBet(bet)
 }
 
-func (c *Client) recv_response_bet(client_protocol *ClientProtocol) {
-	nid, number, err := client_protocol.recv_response_bet()
+func (c *Client) recvResponseBet(client_protocol *ClientProtocol) {
+	nid, number, err := client_protocol.recvResponseBet()
 	if err!= nil {
 		log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v",
 				c.config.ID,
@@ -97,8 +97,8 @@ func (c *Client) recv_response_bet(client_protocol *ClientProtocol) {
 func (c *Client) StartClientLoop(done <-chan bool) {
 	// There is an autoincremental msgID to identify every message sent
 	// Messages if the message amount threshold has not been surpassed
-	for msgID := 1; msgID <= c.config.LoopAmount || !c._keep_running; msgID++ {
-		if !c._keep_running {
+	for msgID := 1; msgID <= c.config.LoopAmount; msgID++ {
+		if !c.keepRunning {
 			break
 		}
 		select {
@@ -112,9 +112,9 @@ func (c *Client) StartClientLoop(done <-chan bool) {
 			client_protocol := NewClientProtocol(c.conn)
 
 			// TODO: Modify the send to avoid short-write
-			c.send_bet(client_protocol)
+			c.sendBet(client_protocol)
 
-			c.recv_response_bet(client_protocol)
+			c.recvResponseBet(client_protocol)
 
 			// Wait a time between sending one message and the next one
 			time.Sleep(c.config.LoopPeriod)
@@ -125,7 +125,7 @@ func (c *Client) StartClientLoop(done <-chan bool) {
 }
 
 func (c *Client) Shutdown() {
-	c._keep_running = false
+	c.keepRunning = false
 	if c.conn != nil {
 		c.conn.Close()
 	}
