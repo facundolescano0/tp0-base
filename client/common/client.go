@@ -215,8 +215,7 @@ func (c *Client) StartClientLoop(done <-chan bool) {
 	// batches := c.SplitBetsInBatches(bets, c.config.BatchAmount, c.MaxBytesPerBatch)
 	for c.keepRunning {
 
-		batch, last_bet, err := c.LoadBatchfromfile(scanner, last_bet)
-		_ = last_bet
+		batch, next_last_bet, err := c.LoadBatchfromfile(scanner, last_bet)
 		if err != nil {
 			log.Errorf("action: load_bets | result: fail | client_id: %v | error: %v",
 				c.config.ID,
@@ -224,8 +223,13 @@ func (c *Client) StartClientLoop(done <-chan bool) {
 			)
 			break
 		}
-		if batch == nil {
-			break
+		if batch == nil || len(batch) == 0 {
+			if next_last_bet != (Bet{}) {
+            	batch = []Bet{next_last_bet}
+				next_last_bet = Bet{}
+        	} else {
+				break
+			}
 		}
 		select {
 		case <-done:
@@ -253,6 +257,7 @@ func (c *Client) StartClientLoop(done <-chan bool) {
 				c.keepRunning = false
 				break
 			}
+			last_bet = next_last_bet
 			log.Infof("action: receive_message | result: %v | client_id: %v",
 			response,
 			c.config.ID,
