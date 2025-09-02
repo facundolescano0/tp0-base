@@ -157,9 +157,6 @@ func (c *Client) LoadBatchfromfile(scanner *bufio.Scanner, lastBet Bet) ([]Bet, 
 
 	for scanner.Scan() {
 		line := scanner.Text()
-		if line == "EOF" {
-			break
-		}
 		bet, err := c.splitBet(line)
 		if err != nil {
 			log.Errorf("action: load_bets | result: fail | client_id: %v | error: %v",
@@ -181,7 +178,15 @@ func (c *Client) LoadBatchfromfile(scanner *bufio.Scanner, lastBet Bet) ([]Bet, 
 		batch = append(batch, bet)
 		batchBytes += betBytes
 	}
-	return batch, Bet{}, nil
+	if err := scanner.Err(); err != nil {
+        return nil, Bet{}, err
+    }
+
+    if len(batch) > 0 {
+        return batch, Bet{}, nil
+    }
+
+    return nil, Bet{}, nil
 }
 
 // StartClientLoop Send messages to the client until some time threshold is met
@@ -212,6 +217,13 @@ func (c *Client) StartClientLoop(done <-chan bool) {
 
 		batch, last_bet, err := c.LoadBatchfromfile(scanner, last_bet)
 		_ = last_bet
+		if err != nil {
+			log.Errorf("action: load_bets | result: fail | client_id: %v | error: %v",
+				c.config.ID,
+				err,
+			)
+			break
+		}
 		if batch == nil {
 			break
 		}
