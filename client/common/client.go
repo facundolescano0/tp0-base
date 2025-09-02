@@ -6,7 +6,7 @@ import (
 	"encoding/csv"
 	"io"
 	"os"
-	
+
 	"github.com/op/go-logging"
 )
 
@@ -167,8 +167,8 @@ func (c *Client) recvResponseBet() {
 				c.config.ID,
 				err,
 			)
-	}	
-	
+	}
+
 	log.Infof("action: apuesta_enviada | result: success | dni: %v | numero: %v",
 		nid,
 		number,
@@ -213,7 +213,7 @@ func (c *Client) StartClientLoop(done <-chan bool) {
 			c.Shutdown()
 			return
 		default:
-			
+
 			err = c.sendBatch(batch)
 			if err != nil {
 				log.Errorf("action: send_message | result: fail | client_id: %v | error: %v",
@@ -232,15 +232,15 @@ func (c *Client) StartClientLoop(done <-chan bool) {
 				c.keepRunning = false
 				break
 			}
-			// log.Infof("action: receive_message | result: %v | client_id: %v",
-			// response,
-			// c.config.ID,
-			// )
+			log.Infof("action: receive_message | result: %v | client_id: %v",
+			response,
+			c.config.ID,
+			)
 			// Wait a time between sending one message and the next one
 			// time.Sleep(c.config.LoopPeriod)
 		}
 	}
-	
+
 	log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
 	c.Shutdown()
 }
