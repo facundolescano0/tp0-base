@@ -227,6 +227,7 @@ func (c *Client) StartClientLoop(done <-chan bool) {
 			if next_last_bet != (Bet{}) {
             	batch = []Bet{next_last_bet}
 				next_last_bet = Bet{}
+				c.keepRunning = false
         	} else {
 				break
 			}
