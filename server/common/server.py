@@ -76,6 +76,7 @@ class Server:
             while self._keep_running:
                 batch = self.recv_batch(server_protocol)
                 if not batch:
+                    self.shutdown()
                     break
                 amount_of_bets = len(batch)
                 stored_count = self.store_batch(batch)
