@@ -267,7 +267,37 @@ func (c *Client) StartClientLoop(done <-chan bool) {
 			// time.Sleep(c.config.LoopPeriod)
 		}
 	}
+	c.clientProtocol.sendFinishedBets()
+	response_result := ""
+	for response_result != "" {
+		if c.clientProtocol != nil {
+			c.clientProtocol.sendWinnersRequest(atoi(c.config.ID))
+			response_result, err = c.clientProtocol.recvResponseWinners()
+			if err == io.EOF {
+				c.conn.Close()
+				c.conn = nil
+				c.clientProtocol = nil
+				time.Sleep(1 * time.Second)
+				retries = 1 
+				c.try_connect(retries)
+				if c.conn != nil {
+					c.clientProtocol = NewClientProtocol(c.conn, c.MaxBytesPerBatch)
+				}
+				break
+			}
+			if err != nil {
+				log.Errorf("action: receive_winners | result: fail | client_id: %v | error: %v",
+					c.config.ID,
+					err,
+				)
+				break
+			}
+			break
+		}
 
+	}
+	amount_winners := processWinnersResponse(response_result)
+	log.Infof("action: consulta_ganadores | result: success | cant_ganadores: %d", amount_winners)
 	log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
 	c.Shutdown()
 }

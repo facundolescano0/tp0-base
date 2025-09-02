@@ -18,6 +18,23 @@ class ServerProtocol:
                 break
         msg = buffer.rstrip().decode('utf-8')
         return msg
+    
+    def recv_agency_id(self):
+        buffer = b""
+        while True:
+            chunk = self.client_sock.recv(1)
+            if not chunk:
+                break
+            buffer += chunk
+            if chunk == b"\n":
+                break
+        agency_id = buffer.decode('utf-8').strip()
+        return agency_id
+
+    def recv_winners_request(self, server_protocol):
+        if server_protocol.recv_agency_id() == "WINNERS_REQUEST":
+            return True
+        return False
 
     def recv_bet(self):
         msg = self.recv_all()
@@ -38,6 +55,9 @@ class ServerProtocol:
         lines = data.splitlines()
         if not lines:
             return None
+        if len(lines) == 1:
+            return lines[0]
+
         header = lines[ServerProtocol.HEADER]
 
         try:

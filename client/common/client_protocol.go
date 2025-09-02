@@ -63,7 +63,6 @@ func (cp *ClientProtocol) recvResponseBet() (string, string, error) {
 	if err != nil {
 		return "", "", err
 	}
-	msg = strings.TrimSpace(msg)
 	parts := strings.Split(msg, "|")
 	if len(parts) != 2 {
 		return "", "", fmt.Errorf("invalid response format")
@@ -76,6 +75,23 @@ func (cp *ClientProtocol) recvResponseBatch() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	response := strings.TrimSpace(msg)
 	return response, nil
+}
+
+func (cp *ClientProtocol) sendFinishedBets() {
+	cp.sendAllMessage("FINISHED\n")
+}
+
+func (cp *ClientProtocol) sendWinnersRequest(agencyId int) {
+	cp.sendAllMessage("WINNERS_REQUEST\n")
+}
+
+
+func (cp *ClientProtocol) recvResponseWinners() (string, error) {
+	   msg, err := bufio.NewReader(cp.conn).ReadString('\n')
+	   if err != nil {
+		   return "", err
+	   }
+	   response := strings.Split(msg, "|")
+	   return response, nil
 }
