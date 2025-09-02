@@ -9,6 +9,7 @@ import (
 
 type ClientProtocol struct {
 	conn   net.Conn
+	maxLength int
 }
 
 func NewClientProtocol(conn net.Conn, maxLength int) *ClientProtocol {
