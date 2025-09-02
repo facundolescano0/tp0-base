@@ -205,7 +205,8 @@ func (c *Client) StartClientLoop(done <-chan bool) {
 		return
 	}
 
-	c.try_connect(max_retries=5)
+	max_retries := 5
+	c.try_connect(max_retries)
 
 	if c.conn == nil {
 		log.Errorf("action: connect | result: fail | client_id: %v | error: no se pudo conectar",
