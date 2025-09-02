@@ -32,7 +32,6 @@ func (cp *ClientProtocol) sendAllMessage(message string) error {
     for total < len(message) {
         n, err := cp.conn.Write([]byte(message[total:]))
         if err != nil {
-            log.Errorf("short write: %v", err)
             return err
         }
         total += n
@@ -62,18 +61,14 @@ func (cp *ClientProtocol) recvResponseBet() (string, string, error) {
 	msg = strings.TrimSpace(msg)
 	parts := strings.Split(msg, "|")
 	if len(parts) != 2 {
-		log.Infof("error de parseo")
 		return "", "", fmt.Errorf("invalid response format")
 	}
 	return parts[0], parts[1], nil
 }
 
 func (cp *ClientProtocol) recvResponseBatch() (string, error) {
-	log.Infof("RRecibiendo respuesta")
 	msg, err := bufio.NewReader(cp.conn).ReadString('\n')
-	log.Infof("RESPUESTA RECIBIDAaaa")
 	if err != nil {
-		log.Infof("error en client de lectura de respuesta de server")
 		return "", err
 	}
 	response := strings.TrimSpace(msg)

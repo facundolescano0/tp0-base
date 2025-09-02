@@ -57,15 +57,12 @@ class Server:
                 stored_count += 1
             except Exception as e:
                 logging.error(f"action: store_batch | result: fail | error: {e}")
-        logging.info(f"action: store_batch | result: success | cantidad: {stored_count}")
         return stored_count
 
     def send_response_batch(self, server_protocol, stored_count, amount_of_bets):
         if stored_count == amount_of_bets:
-            logging.info(f"action: send_response_batch | result: success | cantidad: {stored_count}")
             server_protocol.send_response_batch("success")
         else:
-            logging.info(f"action: send_response_batch | result: fail | cantidad: {stored_count} vs {amount_of_bets}")
             server_protocol.send_response_batch("fail")
 
     def __handle_client_connection(self, server_protocol):
@@ -79,15 +76,13 @@ class Server:
             while self._keep_running:
                 batch = self.recv_batch(server_protocol)
                 if not batch:
-                    logging.info(f"action: receive_message | result: fail | cliente terminó / cerró socket")
                     break
-                logging.info(f"recibí batch de tamaño {len(batch)}")
                 amount_of_bets = len(batch)
                 stored_count = self.store_batch(batch)
                 if stored_count == amount_of_bets:
                     logging.info(f"action: apuesta_recibida | result: success | cantidad: {stored_count}")
                 else:
-                    logging.info(f"action: apuesta_recibida | result: fail | cantidad: {stored_count} vs {amount_of_bets}")
+                    logging.info(f"action: apuesta_recibida | result: fail | cantidad: {stored_count}")
                 self.send_response_batch(server_protocol, stored_count, amount_of_bets)
 
         except OSError as e:

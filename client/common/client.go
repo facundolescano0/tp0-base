@@ -232,10 +232,10 @@ func (c *Client) StartClientLoop(done <-chan bool) {
 				c.keepRunning = false
 				break
 			}
-			log.Infof("action: receive_message | result: %v | client_id: %v",
-			response,
-			c.config.ID,
-			)
+			// log.Infof("action: receive_message | result: %v | client_id: %v",
+			// response,
+			// c.config.ID,
+			// )
 			// Wait a time between sending one message and the next one
 			// time.Sleep(c.config.LoopPeriod)
 		}

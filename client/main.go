@@ -138,5 +138,4 @@ func main() {
 
 	client := common.NewClient(clientConfig)
 	client.StartClientLoop(done)
-	log.Infof("action: client_shutdown post client loop | result: success | client_id: %v", clientConfig.ID)
 }

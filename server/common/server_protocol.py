@@ -1,4 +1,3 @@
-import logging
 import socket
 
 
@@ -41,14 +40,11 @@ class ServerProtocol:
         header = lines[0]
 
         try:
-            logging.info(f"intento convertir a int")
             bet_count = int(header.strip())
         except ValueError:
-            logging.error("action: receive_message | result: fail | error: no puedo convertir a int")
             return None
         
         if len(lines[1:]) < bet_count:
-            logging.error("No se recibieron todas las apuestas esperadas")
             return None
 
         batch = []
