@@ -12,6 +12,7 @@ class Server:
         self._server_socket.bind(('', port))
         self._server_socket.listen(listen_backlog)
         self._keep_running = True
+        self.client_sock = None
 
     def run(self):
         """
@@ -24,10 +25,11 @@ class Server:
 
         while self._keep_running:
             try:
-                client_sock = self.__accept_new_connection()
-                if client_sock:
-                    server_protocol = ServerProtocol(client_sock)
+                self.client_sock = self.__accept_new_connection()
+                if self.client_sock:
+                    server_protocol = ServerProtocol(self.client_sock)
                     self.__handle_client_connection(server_protocol)
+                    self.client_sock = None
             except OSError as e:
                 if e.errno == errno.EBADF:
                     break
@@ -40,8 +42,7 @@ class Server:
         return None
 
     def send_response_bet(self, server_protocol, nid, number):
-        server_protocol.send_response(nid, number)
-        
+        server_protocol.send_response_bet(nid, number)
 
     def __handle_client_connection(self, server_protocol):
         """
@@ -82,5 +83,6 @@ class Server:
 
     def shutdown(self):
         self._keep_running = False
-        self._server_socket.shutdown(socket.SHUT_RDWR)
+        if self.client_sock:
+            self.client_sock.close()
         self._server_socket.close()
