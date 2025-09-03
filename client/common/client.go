@@ -215,7 +215,6 @@ func (c *Client) StartClientLoop(done <-chan bool) {
 				last_bet = Bet{}
 
 			} else {
-				log.Infof("action: send_finished_notify | result: success | client_id: %v | batch_number: %d | batch: %v", c.config.ID, i, batch)
 				batches_finished = true
 			}
 		}
@@ -237,7 +236,6 @@ func (c *Client) StartClientLoop(done <-chan bool) {
 			}
 
 			if batches_finished {
-				log.Infof("action: all_batches_sent | result: success | client_id: %v", c.config.ID)
 				break
 			}
 
@@ -265,7 +263,6 @@ func (c *Client) StartClientLoop(done <-chan bool) {
 			return
 		default:
 			if c.clientProtocol != nil {
-				log.Infof("action: consulta_ganadores | result: requesting | client_id: %v", c.config.ID)
 				err = c.clientProtocol.sendWinnersRequest(agencyID)
 				if err != nil {
 					log.Errorf("action: consulta_ganadores | result: fail | client_id: %v | error: %v",
@@ -298,7 +295,6 @@ func (c *Client) StartClientLoop(done <-chan bool) {
 	}
 	amount_winners := c.processWinnersResponse(response_result)
 	log.Infof("action: consulta_ganadores | result: success | cant_ganadores: %d", amount_winners)
-	log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
 	c.Shutdown()
 }
 

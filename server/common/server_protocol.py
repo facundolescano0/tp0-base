@@ -49,7 +49,6 @@ class ServerProtocol:
             return ServerProtocol.BATCH_FINISHED
 
         if bytes_amount < 0 or bytes_amount > self.max_length:
-            logging.info(f"invalid batch size: {bytes_amount}")
             return None
 
         data = self.recv_all_bytes(bytes_amount)
@@ -61,7 +60,6 @@ class ServerProtocol:
 
         lines = text.splitlines()
         if not lines:
-            logging.info("Not lines")
             return None
 
         batch = []
@@ -70,7 +68,6 @@ class ServerProtocol:
             if len(campos) == 6:
                 batch.append(campos)
             else:
-                logging.info("line without 6 fields")
                 return None
         return batch
 

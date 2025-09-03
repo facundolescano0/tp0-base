@@ -108,7 +108,6 @@ class Server:
     def send_winners(self, agency_id, server_protocol):
         bets = load_bets()
         winners = [bet.document for bet in bets if bet.agency == agency_id and has_won(bet)]
-        logging.info(f"action: send_winners | result: in progress | agency_id: {agency_id} | winners: {winners}" )
         server_protocol.send_winners(winners)
         self.agency_data[agency_id].winners_sent = True
 
@@ -153,16 +152,15 @@ class Server:
                         # # self.shutdown()
                         # break
                     if batch == ServerProtocol.BATCH_FINISHED:
-                        logging.info(f"action: receive_batch_finish | result: success | client_id: {agency_id}")
                         finished_bets = True
                         continue
 
                     amount_of_bets = len(batch)
                     stored_count = self.store_batch(batch)
-                    if stored_count == amount_of_bets:
-                        logging.info(f"action: apuesta_recibida | result: success | cantidad: {stored_count}")
-                    else:
-                        logging.info(f"action: apuesta_recibida | result: fail | cantidad: {stored_count}")
+                    # if stored_count == amount_of_bets:
+                    #     logging.info(f"action: apuesta_recibida | result: success | cantidad: {stored_count}")
+                    # else:
+                    #     logging.info(f"action: apuesta_recibida | result: fail | cantidad: {stored_count}")
                     self.send_response_batch(server_protocol, stored_count, amount_of_bets)
                 elif opcode == ServerProtocol.WINNERS_REQUEST:
                     agency_id = server_protocol.recv_agency_id()
