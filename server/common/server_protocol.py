@@ -3,114 +3,104 @@ import logging
 
 
 class ServerProtocol:
-    HEADER = 0
-    BATCH_FINISHED = "0"
-    WINNERS_REQUEST = "1"
+   
+    BATCH_FINISHED = 0
     ONE_BYTE = 1
+    SIZE = 2
+   
+    # client to server
+    BATCH = 1
+    WINNERS_REQUEST = 2
+
+    # server to client
+    BATCH_OK = 3
+    BATCH_FAIL = 4
+    SEND_WINNERS = 5
+
 
     def __init__(self, client_sock, max_length):
         self.client_sock = client_sock
         self.max_length = max_length
 
-    def recv_all(self):
-        buffer = b""
-        while True:
-            chunk = self.client_sock.recv(self.max_length-len(buffer))
+    def recv_all_bytes(self, bytes_amount):
+        buf = bytearray()
+        while len(buf) < bytes_amount:
+            chunk = self.client_sock.recv(bytes_amount - len(buf))
             if not chunk:
-                break 
-            buffer += chunk
-            if b"\n\n" in chunk:
-                break
-        msg = buffer.decode('utf-8').rstrip('\n\n')
-        logging.info(f"action: recv_all | message: ({msg})")
-        return msg
-    
-    def recv_line(self):
-        buffer = b""
-        while True:
-            chunk = self.client_sock.recv(ServerProtocol.ONE_BYTE)
-            if not chunk:
-                break
-            buffer += chunk
-            if chunk == b"\n":
-                break
-        return buffer.decode('utf-8').rstrip('\n')
-        
-    def recv_agency_id(self):
-        return self.recv_line()
+                raise ConnectionError("socket closed while reading")
+            buf.extend(chunk)
+        return bytes(buf)
 
-    def recv_winners_request(self):
-        winner_request = self.recv_line()
-        if winner_request == ServerProtocol.WINNERS_REQUEST:
-            return winner_request
-        logging.info(f"Received winners request: {winner_request} vs {ServerProtocol.WINNERS_REQUEST}")
+    def recv_opcode(self):
+        buffer = self.recv_all_bytes(ServerProtocol.ONE_BYTE)
+        if buffer:
+            return buffer[0]
         return None
-
-    def recv_bet(self):
-        msg = self.recv_all()
-        campos = msg.split('|')
-        if len(campos) == 6:
-            return campos
-        else:
-            return None
-
-    def send_response_bet(self, nid, number):
-        response = f"{nid}|{number}\n"
-        self.client_sock.sendall(response.encode('utf-8'))
+    
+    def recv_batch_size(self):
+        data = self.recv_all_bytes(ServerProtocol.SIZE)
+        num = int.from_bytes(data, 'big')
+        return num
 
     def recv_batch(self):
-        data = self.recv_all()
-        if data == ServerProtocol.BATCH_FINISHED:
+        bytes_amount = self.recv_batch_size()
+        if bytes_amount == ServerProtocol.BATCH_FINISHED:
             return ServerProtocol.BATCH_FINISHED
-        if not data:
-            logging.info("Received empty batch data")
+
+        if bytes_amount < 0 or bytes_amount > self.max_length:
+            logging.info(f"invalid batch size: {bytes_amount}")
             return None
-        lines = data.splitlines()
+
+        data = self.recv_all_bytes(bytes_amount)
+        try:
+            text = data.decode('utf-8')
+        except UnicodeDecodeError:
+            logging.info("invalid UTF-8 in batch payload")
+            return None
+
+        lines = text.splitlines()
         if not lines:
             logging.info("Not lines")
             return None
-        
-        header = lines[ServerProtocol.HEADER]
-
-        try:
-            bet_count = int(header.strip())
-        except ValueError:
-            logging.info("no puedo convertir a numero")
-            return None
-
-        if bet_count == ServerProtocol.BATCH_FINISHED:
-                return ServerProtocol.BATCH_FINISHED
-        
-        if len(lines[1:]) < bet_count:
-            logging.info("no hay suficientes lineas")
-            return None
 
         batch = []
-        for line in lines[1:1+bet_count]:
+        for line in lines:
             campos = line.split('|')
             if len(campos) == 6:
                 batch.append(campos)
             else:
-                logging.info("no hay 6 campos")
+                logging.info("line without 6 fields")
                 return None
-        logging.info(f"este es el batch que te devuelve recv_Batch {batch}")
         return batch
 
-    def send_response_batch(self, message):
-        response = f"{message}\n"
-        self.client_sock.sendall(response.encode('utf-8'))
+    def recv_agency_id(self):
+        buffer = self.recv_all_bytes(ServerProtocol.ONE_BYTE)
+        if buffer:
+            return buffer[0]
+        return None
+
+    def send_response_batch(self, result):
+        self.client_sock.sendall(bytes([result]))
+
 
     def send_winners(self, winners):
-        if len(winners) == 0:
-            logging.info("action: send_winners | result: no_winners")
-            return None
         msg = ""
-        for i, dni in enumerate(winners):
-            if i > 0:
+        first = True
+        for winner in winners:
+            if not first:
                 msg += "|"
-            msg += str(dni)
-        msg += "\n"
-        self.client_sock.sendall(msg.encode('utf-8'))
+            msg += winner
+            first = False
+
+        payload = msg.encode('utf-8')
+
+        self.client_sock.sendall(bytes([self.SEND_WINNERS]))
+
+        size_winners = len(payload)
+        self.client_sock.sendall(size_winners.to_bytes(ServerProtocol.SIZE, 'big'))
+
+        self.client_sock.sendall(payload)
 
     def close(self):
         self.client_sock.close()
+

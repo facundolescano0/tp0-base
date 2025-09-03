@@ -1,15 +1,26 @@
 package common
 
 import (
-    "bufio"
+    "encoding/binary"
     "fmt"
     "net"
-    "strings"   
+    "strings"
 )
 
 const (
-	WinnersRequest = "1"
-	BatchFinished   = "0"
+    BATCH_FINISHED = 0
+    ONE_BYTE = 1
+    SIZE = 2
+   
+    // client to server
+    BATCH = 1
+    WINNERS_REQUEST = 2
+
+    // server to client
+    BATCH_OK = 3
+    BATCH_FAIL = 4
+    SEND_WINNERS = 5
+
 )
 
 type ClientProtocol struct {
@@ -30,77 +41,129 @@ func (cp *ClientProtocol) serializeBet(bet Bet) string {
         bet.Agency, bet.FirstName, bet.LastName, bet.Document, bet.Birthdate, bet.Number)
 }
 
-func (cp *ClientProtocol) serializeHeader(betAmount int) string {
-    return fmt.Sprintf("%d!", betAmount)
-}
-
-func (cp *ClientProtocol) sendAllMessage(message string) error {
-	total := 0
-    for total < len(message) {
-        n, err := cp.conn.Write([]byte(message[total:]))
+func (cp *ClientProtocol) sendAllBytes(buf []byte) error {
+    total := 0
+    for total < len(buf) {
+        n, err := cp.conn.Write(buf[total:])
         if err != nil {
             return err
         }
         total += n
     }
-	return nil
+    return nil
 }
 
-func (cp *ClientProtocol) sendBet(bet Bet) {
-	msg := cp.serializeBet(bet)
-	cp.sendAllMessage(msg)
+func (cp *ClientProtocol) sendAllMessage(message string) error {
+    return cp.sendAllBytes([]byte(message))
+}
+
+func (cp *ClientProtocol) sendOpCode(opCode int) error {
+    buf := []byte{byte(opCode)}
+    return cp.sendAllBytes(buf)
+}
+
+func (cp *ClientProtocol) sendBatchSize(size int) error {
+    buf := make([]byte, 2)
+    binary.BigEndian.PutUint16(buf, uint16(size))
+    return cp.sendAllBytes(buf)
 }
 
 func (cp *ClientProtocol) sendBatch(batch []Bet) error {
-	header := cp.serializeHeader(len(batch))
-	log.Infof("action: send_batch | result: success | batch_size: %d | header: %s", len(batch), header)
-	message := header
+	if len(batch) == 0 {
+        if err := cp.sendOpCode(BATCH); err != nil {
+            return err
+        }
+        return cp.sendBatchSize(BATCH_FINISHED) 
+    }
+	
+	var msg strings.Builder
 	for _, bet := range batch {
-		message += cp.serializeBet(bet)
+		msg.WriteString(cp.serializeBet(bet))
 	}
-	if len(message) > cp.maxLength {
+
+	message := msg.String()
+	sizeBatch := len(message)
+
+	if sizeBatch > cp.maxLength {
 		return fmt.Errorf("message too long")
 	}
-	message = message + "\n"
-	log.Infof("action: send_batch | result: success | batch_size: %d | message: (%s)", len(batch), message)
-	return cp.sendAllMessage(message)
+
+    if err := cp.sendOpCode(BATCH); err != nil { return err }
+    if err := cp.sendBatchSize(sizeBatch); err != nil { return err }
+    return cp.sendAllMessage(message)
 }
 
-func (cp *ClientProtocol) recvResponseBet() (string, string, error) {
-	msg, err := bufio.NewReader(cp.conn).ReadString('\n')
+func (cp *ClientProtocol) sendWinnersRequest() error {
+	return cp.sendOpCode(WINNERS_REQUEST)
+}
+
+func (cp *ClientProtocol) recvOpCode() (int, error) {
+    buf := make([]byte, ONE_BYTE)
+    total := 0
+    for total < ONE_BYTE {
+        n, err := cp.conn.Read(buf[total:])
+        if err != nil {
+            return 0, err
+        }
+        total += n
+    }
+    return int(buf[0]), nil
+}
+
+func (cp *ClientProtocol) recvResponseBatch() (int, error) {
+	batchResponse, err := cp.recvOpCode()
 	if err != nil {
-		return "", "", err
+		return 0, err
 	}
-	parts := strings.Split(msg, "|")
-	if len(parts) != 2 {
-		return "", "", fmt.Errorf("invalid response format")
-	}
-	return parts[0], parts[1], nil
+	return batchResponse, nil
 }
 
-func (cp *ClientProtocol) recvResponseBatch() (string, error) {
-	msg, err := bufio.NewReader(cp.conn).ReadString('\n')
-	if err != nil {
-		return "", err
+func (cp *ClientProtocol) recvSizeMsg () (int, error) {
+	buf := make([]byte, SIZE)
+	total := 0
+	for total < SIZE {
+		n, err := cp.conn.Read(buf[total:])
+		if err != nil {
+			return 0, err
+		}
+		total += n
 	}
-	msg = strings.TrimSpace(msg)
-	return msg, nil
+	return int(binary.BigEndian.Uint16(buf)), nil
 }
-
-func (cp *ClientProtocol) sendWinnersRequest() {
-	cp.sendAllMessage(fmt.Sprintf("%s\n", WinnersRequest))
-}
-
 
 func (cp *ClientProtocol) recvResponseWinners() ([]string, error) {
-	   msg, err := bufio.NewReader(cp.conn).ReadString('\n')
-	   if err != nil {
-		   return nil, err
-	   }
-	   response := strings.Split(msg, "|")
-	   return response, nil
-}
+	recvOpCode, err := cp.recvOpCode()
+	if err != nil {
+		return nil, err
+	}
+	if recvOpCode != SEND_WINNERS {
+		return nil, fmt.Errorf("unexpected opcode: %d", recvOpCode)
+	}
 
-func (cp *ClientProtocol) sendAgencyID(agencyID string) {
-	cp.sendAllMessage(fmt.Sprintf("%s\n", agencyID))
+	size, err := cp.recvSizeMsg()
+    if err != nil {
+        return nil, err
+    }
+
+	if size < 0 || size > cp.maxLength {
+        return nil, fmt.Errorf("invalid winners size: %d", size)
+    }
+
+    buf := make([]byte, size)
+    total := 0
+    for total < size {
+        n, err := cp.conn.Read(buf[total:])
+        if err != nil { return nil, err }
+        total += n
+    }
+
+    payload := string(buf)
+    // payload = strings.TrimSuffix(payload, "|")
+    parts := strings.Split(payload, "|")
+	
+	if len(parts) == 1 && parts[0] == "" {
+        return []string{}, nil
+    }
+
+    return parts, nil
 }
