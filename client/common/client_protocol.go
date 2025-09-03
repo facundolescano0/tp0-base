@@ -123,6 +123,9 @@ func (cp *ClientProtocol) recvResponseBatch() (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	if batchResponse != BATCH_OK && batchResponse != BATCH_FAIL {
+		return 0, fmt.Errorf("unexpected batch response: %d", batchResponse)
+	}
 	return batchResponse, nil
 }
 
