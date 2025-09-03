@@ -7,7 +7,6 @@ import (
 	"strings"
 	"fmt"
 	"bufio"
-	"io"
 	"strconv"
 
 	"github.com/op/go-logging"
