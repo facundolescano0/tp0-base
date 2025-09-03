@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"bufio"
 	"io"
+	"strconv"
 
 	"github.com/op/go-logging"
 )
@@ -84,47 +85,11 @@ func (c *Client) createClientSocket() error {
 	return nil
 }
 
-func (c *Client) sendBet(){
-	bet := Bet{
-		Agency:     c.config.ID,
-		FirstName:  c.config.Name,
-		LastName:   c.config.Surname,
-		Document:   c.config.NID,
-		Birthdate:  c.config.Birth,
-		Number:     c.config.Number,
-	}
-	c.clientProtocol.sendBet(bet)
-}
-
-func (c *Client) sendBatch(batch []Bet) error {
-	return c.clientProtocol.sendBatch(batch)
-}
-
-func (c *Client) recvResponseBatch() (string, error) {
-	return c.clientProtocol.recvResponseBatch()
-}
-
-func (c *Client) recvResponseBet() {
-	nid, number, err := c.clientProtocol.recvResponseBet()
-	if err!= nil {
-		log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v",
-				c.config.ID,
-				err,
-			)
-	}
-
-	log.Infof("action: apuesta_enviada | result: success | dni: %v | numero: %v",
-		nid,
-		number,
-	)
-}
-
 func (c *Client) try_connect(max_retries int) {
 	for i := 0; i < max_retries; i++ {
 		c.createClientSocket()
 		if c.conn != nil {
 			c.clientProtocol = NewClientProtocol(c.conn, c.MaxBytesPerBatch)
-			c.clientProtocol.sendAgencyID(c.config.ID)
 			break
 		}
 	}
@@ -170,8 +135,7 @@ func (c *Client) LoadBatchfromfile(scanner *bufio.Scanner, lastBet Bet) ([]Bet, 
 		betStr := c.clientProtocol.serializeBet(bet)
 		betBytes := len(betStr)
 
-		headerBytes := len(c.clientProtocol.serializeHeader(len(batch) + 1))
-		totalBytes := headerBytes + batchBytes + betBytes
+		totalBytes := batchBytes + betBytes
 
 		if len(batch) >= c.config.BatchAmount || totalBytes > c.MaxBytesPerBatch {
 			return batch, bet, nil
@@ -205,6 +169,15 @@ func (c *Client) StartClientLoop(done <-chan bool) {
 
 	max_retries := 5
 	c.try_connect(max_retries)
+
+	agencyID, err := strconv.Atoi(c.config.ID)
+	if err != nil {
+		log.Errorf("action: connect | result: fail | client_id: %v | error: %v",
+			c.config.ID,
+			err,
+		)
+		return
+	}
 
 	if c.conn == nil {
 		log.Errorf("action: connect | result: fail | client_id: %v | error: no se pudo conectar",
@@ -254,7 +227,7 @@ func (c *Client) StartClientLoop(done <-chan bool) {
 			return
 		default:
 
-			err = c.sendBatch(batch)
+			err = c.clientProtocol.sendBatch(batch)
 			if err != nil {
 				log.Errorf("action: send_message | result: fail | client_id: %v | error: %v",
 					c.config.ID,
@@ -269,7 +242,7 @@ func (c *Client) StartClientLoop(done <-chan bool) {
 				break
 			}
 
-			response, err := c.recvResponseBatch()
+			response, err := c.clientProtocol.recvResponseBatch()
 			//_, err := c.recvResponseBatch()
 			if err != nil {
 				log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v",
@@ -298,7 +271,19 @@ func (c *Client) StartClientLoop(done <-chan bool) {
 		default:
 			if c.clientProtocol != nil {
 				log.Infof("action: consulta_ganadores | result: requesting | client_id: %v", c.config.ID)
-				c.clientProtocol.sendWinnersRequest()
+				err = c.clientProtocol.sendWinnersRequest(agencyID)
+				if err != nil {
+					log.Errorf("action: consulta_ganadores | result: fail | client_id: %v | error: %v",
+						c.config.ID,
+						err,
+					)
+					c.conn.Close()
+					c.conn = nil
+					c.clientProtocol = nil
+					c.reconnectOnce()
+					continue
+				}
+
 				response_result, err = c.clientProtocol.recvResponseWinners()
 				if err == io.EOF {
 					log.Infof("action: consulta_ganadores | result: fail | client_id: %v | error: %v",

@@ -81,21 +81,29 @@ class Server:
 
     def send_response_batch(self, server_protocol, stored_count, amount_of_bets):
         if stored_count == amount_of_bets:
-            server_protocol.send_response_batch("success")
+            server_protocol.send_response_batch(ServerProtocol.BATCH_OK)
         else:
-            server_protocol.send_response_batch("fail")
+            server_protocol.send_response_batch(ServerProtocol.BATCH_FAIL)
 
     def recv_winners_request(self, server_protocol):
         return server_protocol.recv_winners_request()
     
     def is_sort_done(self):
         if len(self.agency_data) != self.clients_amount:
-            logging.info(f"action: is_sort_done | result: in_progress 1 | agencies_finished: {len(self.agency_data)} | total_agencies: {self.clients_amount}")
             return False
         if not all(data.finished_bets for data in self.agency_data.values()):
-            logging.info(f"action: is_sort_done | result: in_progress 2 | agencies_finished: {len(self.agency_data)} | total_agencies: {self.clients_amount}")
             return False
         return True
+    
+    def is_done(self):
+        if len(self.agency_data) != self.clients_amount:
+            return False
+        if not all(data.finished_bets for data in self.agency_data.values()):
+            return False
+        if not all(data.winners_sent for data in self.agency_data.values()):
+            return False
+        return True
+
 
     def send_winners(self, agency_id, server_protocol):
         bets = load_bets()
@@ -105,12 +113,10 @@ class Server:
         self.agency_data[agency_id].winners_sent = True
 
     def handle_winners_request(self, agency_id, server_protocol):
-        request = self.recv_winners_request(server_protocol)
-        if not request: 
-            logging.error("action: handle_winners_request | result: fail | error: incorrect message")
-            return
         if self.is_sort_done():
             self.send_winners(agency_id, server_protocol)
+            return True
+        return False
 
     def __handle_client_connection(self, server_protocol):
         """
@@ -120,41 +126,63 @@ class Server:
         client socket will also be closed
         """
         try:
-            agency_id = server_protocol.recv_agency_id()
-            agency_id = int(agency_id)
 
-            if agency_id not in self.agency_data:
-                self.agency_data[agency_id] = AgencyData(agency_id)
-            data = self.agency_data[agency_id]
+            # agency_id = server_protocol.recv_agency_id()
+            # agency_id = int(agency_id)
 
-            if data.finished_bets and not data.winners_sent:
-                self.handle_winners_request(agency_id, server_protocol)
-                return
+            # if agency_id not in self.agency_data:
+            #     self.agency_data[agency_id] = AgencyData(agency_id)
+            # data = self.agency_data[agency_id]
+
+            # if data.finished_bets and not data.winners_sent:
+            #     self.handle_winners_request(agency_id, server_protocol)
+            #     return
+            
+            agency_id = None
+            finished_bets = False
 
             while self._keep_running:
-                batch = self.recv_batch(server_protocol)
-                if not batch:
-                    logging.info(f"action: receive_message | result: fail | error: batch nill")
-                    # self.shutdown()
-                    break
-                if batch == ServerProtocol.BATCH_FINISHED:
-                    logging.info(f"action: receive_batch_finish | result: success | client_id: {agency_id}")
-                    data.finished_bets = True
-                    self.handle_winners_request(agency_id, server_protocol)
-                    break
 
-                amount_of_bets = len(batch)
-                stored_count = self.store_batch(batch)
-                if stored_count == amount_of_bets:
-                    logging.info(f"action: apuesta_recibida | result: success | cantidad: {stored_count}")
+                opcode = server_protocol.recv_opcode()
+                if opcode == ServerProtocol.BATCH:
+                    batch = self.recv_batch(server_protocol)
+                    # if not batch:
+                        # logging.info(f"action: receive_message | result: fail | error: batch nill")
+                        # # self.shutdown()
+                        # break
+                    if batch == ServerProtocol.BATCH_FINISHED:
+                        logging.info(f"action: receive_batch_finish | result: success | client_id: {agency_id}")
+                        finished_bets = True
+                        break
+                    amount_of_bets = len(batch)
+                    stored_count = self.store_batch(batch)
+                    if stored_count == amount_of_bets:
+                        logging.info(f"action: apuesta_recibida | result: success | cantidad: {stored_count}")
+                    else:
+                        logging.info(f"action: apuesta_recibida | result: fail | cantidad: {stored_count}")
+                    self.send_response_batch(server_protocol, stored_count, amount_of_bets)
+                if opcode == ServerProtocol.WINNERS_REQUEST:
+                    agency_id = server_protocol.recv_agency_id()
+                    
+                    if agency_id not in self.agency_data:
+                        self.agency_data[agency_id] = AgencyData(agency_id)
+                    if finished_bets:
+                        self.agency_data[agency_id].finished_bets = True
+
+                    data = self.agency_data[agency_id]
+                    if data.finished_bets:
+                        winners_sent = self.handle_winners_request(agency_id, server_protocol)
+                        if winners_sent:
+                            data.winners_sent = True
+                    break
                 else:
-                    logging.info(f"action: apuesta_recibida | result: fail | cantidad: {stored_count}")
-                self.send_response_batch(server_protocol, stored_count, amount_of_bets)
-
+                    logging.error(f"action: receive_message | result: fail | error: unexpected opcode: {opcode}")
         except OSError as e:
             logging.error("action: receive_message | result: fail | error: {e}")
         finally:
             server_protocol.close()
+            if self.is_done():
+                self.shutdown()
 
     def __accept_new_connection(self):
         """

@@ -93,8 +93,16 @@ func (cp *ClientProtocol) sendBatch(batch []Bet) error {
     return cp.sendAllMessage(message)
 }
 
-func (cp *ClientProtocol) sendWinnersRequest() error {
-	return cp.sendOpCode(WINNERS_REQUEST)
+func (cp *ClientProtocol) sendAgencyId(id int) error {
+    buf := []byte{byte(id)}
+    return cp.sendAllBytes(buf)
+}
+
+func (cp *ClientProtocol) sendWinnersRequest(id int) error {
+	if err := cp.sendOpCode(WINNERS_REQUEST); err != nil {
+		return err
+	}
+	return cp.sendAgencyId(id)
 }
 
 func (cp *ClientProtocol) recvOpCode() (int, error) {
