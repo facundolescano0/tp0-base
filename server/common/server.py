@@ -3,7 +3,7 @@ import logging
 import errno
 
 from .server_protocol import ServerProtocol
-from .utils import store_bets, Bet
+from .utils import store_bets, Bet, load_bets, has_won
 
 class AgencyData:
     def __init__(self, agency_id):
@@ -18,7 +18,8 @@ class Server:
     IDX_DOCUMENT = 3
     IDX_BIRTHDATE = 4
     IDX_NUMBER = 5
-    def __init__(self, port, listen_backlog):
+    FINISHED_BATCHES = "0"
+    def __init__(self, port, listen_backlog, clients_amount):
         # Initialize server socket
         self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._server_socket.bind(('', port))
@@ -26,6 +27,7 @@ class Server:
         self._keep_running = True
         self.client_sock = None
         self.agency_data = {}
+        self.clients_amount = clients_amount
 
     def run(self):
         """
@@ -40,7 +42,7 @@ class Server:
                 self.client_sock = self.__accept_new_connection()
                 if self.client_sock:
                     server_protocol = ServerProtocol(self.client_sock, max_length=8192)
-                    self.__handle_client_connection(server_protocol, agency_data)
+                    self.__handle_client_connection(server_protocol)
                     self.client_sock = None
             except OSError as e:
                 if e.errno == errno.EBADF:
@@ -57,20 +59,18 @@ class Server:
         server_protocol.send_response(nid, number)
 
     def recv_batch(self, server_protocol):
-        if batch := server_protocol.recv_batch():
-            return batch
-        return None
+        return server_protocol.recv_batch()
 
     def store_batch(self, batch):
         stored_count = 0
         for bet in batch:
             bet_obj = Bet(
-                agency=bet[self.IDX_AGENCY],
+                agency=int(bet[self.IDX_AGENCY]),
                 first_name=bet[self.IDX_FIRST_NAME],
                 last_name=bet[self.IDX_LAST_NAME],
                 document=bet[self.IDX_DOCUMENT],
                 birthdate=bet[self.IDX_BIRTHDATE],
-                number=bet[self.IDX_NUMBER]
+                number=int(bet[self.IDX_NUMBER])
             )
             try:
                 store_bets([bet_obj])
@@ -89,9 +89,28 @@ class Server:
         return server_protocol.recv_winners_request()
     
     def is_sort_done(self):
-        pass
-    def send_winners(self, agency_id):
-        pass
+        if len(self.agency_data) != self.clients_amount:
+            logging.info(f"action: is_sort_done | result: in_progress 1 | agencies_finished: {len(self.agency_data)} | total_agencies: {self.clients_amount}")
+            return False
+        if not all(data.finished_bets for data in self.agency_data.values()):
+            logging.info(f"action: is_sort_done | result: in_progress 2 | agencies_finished: {len(self.agency_data)} | total_agencies: {self.clients_amount}")
+            return False
+        return True
+
+    def send_winners(self, agency_id, server_protocol):
+        bets = load_bets()
+        winners = [bet.document for bet in bets if bet.agency == agency_id and has_won(bet)]
+        logging.info(f"action: send_winners | result: in progress | agency_id: {agency_id} | winners: {winners}" )
+        server_protocol.send_winners(winners)
+        self.agency_data[agency_id].winners_sent = True
+
+    def handle_winners_request(self, agency_id, server_protocol):
+        request = self.recv_winners_request(server_protocol)
+        if not request: 
+            logging.error("action: handle_winners_request | result: fail | error: incorrect message")
+            return
+        if self.is_sort_done():
+            self.send_winners(agency_id, server_protocol)
 
     def __handle_client_connection(self, server_protocol):
         """
@@ -102,27 +121,26 @@ class Server:
         """
         try:
             agency_id = server_protocol.recv_agency_id()
+            agency_id = int(agency_id)
+
             if agency_id not in self.agency_data:
                 self.agency_data[agency_id] = AgencyData(agency_id)
             data = self.agency_data[agency_id]
 
             if data.finished_bets and not data.winners_sent:
-                err = self.recv_winners_request()
-                if err: 
-                    return
-                if self.is_sort_done():
-                    self.send_winners(agency_id)
+                self.handle_winners_request(agency_id, server_protocol)
                 return
 
             while self._keep_running:
                 batch = self.recv_batch(server_protocol)
                 if not batch:
+                    logging.info(f"action: receive_message | result: fail | error: batch nill")
                     # self.shutdown()
                     break
-                if batch == "FINISHED":
+                if batch == ServerProtocol.BATCH_FINISHED:
+                    logging.info(f"action: receive_batch_finish | result: success | client_id: {agency_id}")
                     data.finished_bets = True
-                    if self.is_sort_done():
-                        self.send_winners(id)
+                    self.handle_winners_request(agency_id, server_protocol)
                     break
 
                 amount_of_bets = len(batch)

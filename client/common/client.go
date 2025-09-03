@@ -7,6 +7,7 @@ import (
 	"strings"
 	"fmt"
 	"bufio"
+	"io"
 
 	"github.com/op/go-logging"
 )
@@ -123,6 +124,7 @@ func (c *Client) try_connect(max_retries int) {
 		c.createClientSocket()
 		if c.conn != nil {
 			c.clientProtocol = NewClientProtocol(c.conn, c.MaxBytesPerBatch)
+			c.clientProtocol.sendAgencyID(c.config.ID)
 			break
 		}
 	}
@@ -182,11 +184,20 @@ func (c *Client) LoadBatchfromfile(scanner *bufio.Scanner, lastBet Bet) ([]Bet, 
         return nil, Bet{}, err
     }
 
-    if len(batch) > 0 {
-        return batch, Bet{}, nil
-    }
+    return batch, Bet{}, nil
+}
 
-    return nil, Bet{}, nil
+func (c *Client) processWinnersResponse(response []string) int {
+	return len(response)
+}
+
+func (c *Client) reconnectOnce() {
+    time.Sleep(1 * time.Second)
+    retries := 1
+    c.try_connect(retries)
+    if c.conn != nil {
+        c.clientProtocol = NewClientProtocol(c.conn, c.MaxBytesPerBatch)
+    }
 }
 
 // StartClientLoop Send messages to the client until some time threshold is met
@@ -211,10 +222,10 @@ func (c *Client) StartClientLoop(done <-chan bool) {
 
     scanner := bufio.NewScanner(file)
 	last_bet := Bet{}
-
-	// batches := c.SplitBetsInBatches(bets, c.config.BatchAmount, c.MaxBytesPerBatch)
-	for c.keepRunning {
-
+	var i int = 0
+	var batches_finished bool = false
+	for c.keepRunning && !batches_finished {
+		i += 1
 		batch, next_last_bet, err := c.LoadBatchfromfile(scanner, last_bet)
 		if err != nil {
 			log.Errorf("action: load_bets | result: fail | client_id: %v | error: %v",
@@ -223,13 +234,17 @@ func (c *Client) StartClientLoop(done <-chan bool) {
 			)
 			break
 		}
+
+		last_bet = next_last_bet
+
 		if batch == nil || len(batch) == 0 {
-			if next_last_bet != (Bet{}) {
-            	batch = []Bet{next_last_bet}
-				next_last_bet = Bet{}
-				c.keepRunning = false
-        	} else {
-				break
+			if last_bet != (Bet{}) {
+            	batch = []Bet{last_bet}
+				last_bet = Bet{}
+
+			} else {
+				log.Infof("action: send_finished_notify | result: success | client_id: %v | batch_number: %d | batch: %v", c.config.ID, i, batch)
+				batches_finished = true
 			}
 		}
 		select {
@@ -248,7 +263,13 @@ func (c *Client) StartClientLoop(done <-chan bool) {
 				c.keepRunning = false
 				break
 			}
-			 response, err := c.recvResponseBatch()
+
+			if batches_finished {
+				log.Infof("action: all_batches_sent | result: success | client_id: %v", c.config.ID)
+				break
+			}
+
+			response, err := c.recvResponseBatch()
 			//_, err := c.recvResponseBatch()
 			if err != nil {
 				log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v",
@@ -258,7 +279,6 @@ func (c *Client) StartClientLoop(done <-chan bool) {
 				c.keepRunning = false
 				break
 			}
-			last_bet = next_last_bet
 			log.Infof("action: receive_message | result: %v | client_id: %v",
 			response,
 			c.config.ID,
@@ -267,36 +287,44 @@ func (c *Client) StartClientLoop(done <-chan bool) {
 			// time.Sleep(c.config.LoopPeriod)
 		}
 	}
-	c.clientProtocol.sendFinishedBets()
-	response_result := ""
-	for response_result != "" {
-		if c.clientProtocol != nil {
-			c.clientProtocol.sendWinnersRequest(atoi(c.config.ID))
-			response_result, err = c.clientProtocol.recvResponseWinners()
-			if err == io.EOF {
-				c.conn.Close()
-				c.conn = nil
-				c.clientProtocol = nil
-				time.Sleep(1 * time.Second)
-				retries = 1 
-				c.try_connect(retries)
-				if c.conn != nil {
-					c.clientProtocol = NewClientProtocol(c.conn, c.MaxBytesPerBatch)
+
+	var response_result = []string{}
+	for len(response_result) == 0 {
+		select {
+		case <-done:
+			log.Infof("action: shutdown | result: success | client_id: %v", c.config.ID)
+			c.Shutdown()
+			return
+		default:
+			if c.clientProtocol != nil {
+				log.Infof("action: consulta_ganadores | result: requesting | client_id: %v", c.config.ID)
+				c.clientProtocol.sendWinnersRequest()
+				response_result, err = c.clientProtocol.recvResponseWinners()
+				if err == io.EOF {
+					log.Infof("action: consulta_ganadores | result: fail | client_id: %v | error: %v",
+						c.config.ID,
+						err,
+					)
+					c.conn.Close()
+					c.conn = nil
+					c.clientProtocol = nil
+					c.reconnectOnce()
+					continue
+				}
+				if err != nil {
+					log.Errorf("action: receive_winners | result: fail | client_id: %v | error: %v",
+						c.config.ID,
+						err,
+					)
+					break
 				}
 				break
+			} else {
+					c.reconnectOnce()
 			}
-			if err != nil {
-				log.Errorf("action: receive_winners | result: fail | client_id: %v | error: %v",
-					c.config.ID,
-					err,
-				)
-				break
-			}
-			break
 		}
-
 	}
-	amount_winners := processWinnersResponse(response_result)
+	amount_winners := c.processWinnersResponse(response_result)
 	log.Infof("action: consulta_ganadores | result: success | cant_ganadores: %d", amount_winners)
 	log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
 	c.Shutdown()

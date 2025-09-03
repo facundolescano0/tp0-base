@@ -7,6 +7,11 @@ import (
     "strings"   
 )
 
+const (
+	WinnersRequest = "1"
+	BatchFinished   = "0"
+)
+
 type ClientProtocol struct {
 	conn   net.Conn
 	maxLength int
@@ -26,7 +31,7 @@ func (cp *ClientProtocol) serializeBet(bet Bet) string {
 }
 
 func (cp *ClientProtocol) serializeHeader(betAmount int) string {
-    return fmt.Sprintf("%d\n", betAmount)
+    return fmt.Sprintf("%d!", betAmount)
 }
 
 func (cp *ClientProtocol) sendAllMessage(message string) error {
@@ -48,6 +53,7 @@ func (cp *ClientProtocol) sendBet(bet Bet) {
 
 func (cp *ClientProtocol) sendBatch(batch []Bet) error {
 	header := cp.serializeHeader(len(batch))
+	log.Infof("action: send_batch | result: success | batch_size: %d | header: %s", len(batch), header)
 	message := header
 	for _, bet := range batch {
 		message += cp.serializeBet(bet)
@@ -55,6 +61,8 @@ func (cp *ClientProtocol) sendBatch(batch []Bet) error {
 	if len(message) > cp.maxLength {
 		return fmt.Errorf("message too long")
 	}
+	message = message + "\n"
+	log.Infof("action: send_batch | result: success | batch_size: %d | message: (%s)", len(batch), message)
 	return cp.sendAllMessage(message)
 }
 
@@ -75,23 +83,24 @@ func (cp *ClientProtocol) recvResponseBatch() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return response, nil
+	msg = strings.TrimSpace(msg)
+	return msg, nil
 }
 
-func (cp *ClientProtocol) sendFinishedBets() {
-	cp.sendAllMessage("FINISHED\n")
-}
-
-func (cp *ClientProtocol) sendWinnersRequest(agencyId int) {
-	cp.sendAllMessage("WINNERS_REQUEST\n")
+func (cp *ClientProtocol) sendWinnersRequest() {
+	cp.sendAllMessage(fmt.Sprintf("%s\n", WinnersRequest))
 }
 
 
-func (cp *ClientProtocol) recvResponseWinners() (string, error) {
+func (cp *ClientProtocol) recvResponseWinners() ([]string, error) {
 	   msg, err := bufio.NewReader(cp.conn).ReadString('\n')
 	   if err != nil {
-		   return "", err
+		   return nil, err
 	   }
 	   response := strings.Split(msg, "|")
 	   return response, nil
+}
+
+func (cp *ClientProtocol) sendAgencyID(agencyID string) {
+	cp.sendAllMessage(fmt.Sprintf("%s\n", agencyID))
 }

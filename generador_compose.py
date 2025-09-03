@@ -2,7 +2,7 @@ class GeneradorCompose:
     def generar_nombre(self, f):
         f.write("name: tp0\n")
 
-    def generar_server(self, f):
+    def generar_server(self, f, cantidad_clientes):
 
         f.write("  server:\n")
         f.write("    container_name: server\n")
@@ -10,6 +10,7 @@ class GeneradorCompose:
         f.write("    entrypoint: python3 /main.py\n")
         f.write("    environment:\n")
         f.write("      - PYTHONUNBUFFERED=1\n")
+        f.write(f"      - CLIENTS_AMOUNT={cantidad_clientes}\n")
         f.write("    networks:\n")
         f.write("      - testing_net\n")
         f.write("    volumes:\n")
@@ -42,7 +43,7 @@ class GeneradorCompose:
     def generar_servicios(self, f, cantidad_clientes):
 
         f.write("services:\n")
-        self.generar_server(f)
+        self.generar_server(f, cantidad_clientes)
         self.generar_clientes(f, cantidad_clientes)
 
 
