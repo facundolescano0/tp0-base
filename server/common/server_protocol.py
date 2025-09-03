@@ -16,6 +16,7 @@ class ServerProtocol:
     BATCH_OK = 3
     BATCH_FAIL = 4
     SEND_WINNERS = 5
+    NOT_READY = 6
 
 
     def __init__(self, client_sock, max_length):
@@ -100,6 +101,9 @@ class ServerProtocol:
         self.client_sock.sendall(size_winners.to_bytes(ServerProtocol.SIZE, 'big'))
 
         self.client_sock.sendall(payload)
+
+    def send_not_ready(self):
+        self.client_sock.sendall(bytes([ServerProtocol.NOT_READY]))
 
     def close(self):
         self.client_sock.close()

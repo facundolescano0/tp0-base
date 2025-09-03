@@ -20,6 +20,7 @@ const (
     BATCH_OK = 3
     BATCH_FAIL = 4
     SEND_WINNERS = 5
+    NOT_READY = 6
 
 )
 
@@ -146,6 +147,9 @@ func (cp *ClientProtocol) recvResponseWinners() ([]string, error) {
 	recvOpCode, err := cp.recvOpCode()
 	if err != nil {
 		return nil, err
+	}
+	if recvOpCode == NOT_READY {
+		return nil, nil
 	}
 	if recvOpCode != SEND_WINNERS {
 		return nil, fmt.Errorf("unexpected opcode: %d", recvOpCode)

@@ -281,16 +281,8 @@ func (c *Client) StartClientLoop(done <-chan bool) {
 				}
 
 				response_result, err = c.clientProtocol.recvResponseWinners()
-				if err == io.EOF {
-					log.Infof("action: consulta_ganadores | result: fail | client_id: %v | error: %v",
-						c.config.ID,
-						err,
-					)
-					c.conn.Close()
-					c.conn = nil
-					c.clientProtocol = nil
-					c.reconnectOnce()
-					continue
+				if err == nil && response_result != nil {
+					break
 				}
 				if err != nil {
 					log.Errorf("action: receive_winners | result: fail | client_id: %v | error: %v",

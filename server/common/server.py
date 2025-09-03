@@ -116,6 +116,7 @@ class Server:
         if self.is_sort_done():
             self.send_winners(agency_id, server_protocol)
             return True
+        server_protocol.send_not_ready()
         return False
 
     def __handle_client_connection(self, server_protocol):
