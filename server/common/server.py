@@ -144,6 +144,7 @@ class Server:
             while self._keep_running:
 
                 opcode = server_protocol.recv_opcode()
+
                 if opcode == ServerProtocol.BATCH:
                     batch = self.recv_batch(server_protocol)
                     # if not batch:
@@ -153,7 +154,8 @@ class Server:
                     if batch == ServerProtocol.BATCH_FINISHED:
                         logging.info(f"action: receive_batch_finish | result: success | client_id: {agency_id}")
                         finished_bets = True
-                        break
+                        continue
+
                     amount_of_bets = len(batch)
                     stored_count = self.store_batch(batch)
                     if stored_count == amount_of_bets:
@@ -161,7 +163,7 @@ class Server:
                     else:
                         logging.info(f"action: apuesta_recibida | result: fail | cantidad: {stored_count}")
                     self.send_response_batch(server_protocol, stored_count, amount_of_bets)
-                if opcode == ServerProtocol.WINNERS_REQUEST:
+                elif opcode == ServerProtocol.WINNERS_REQUEST:
                     agency_id = server_protocol.recv_agency_id()
                     
                     if agency_id not in self.agency_data:
@@ -180,9 +182,11 @@ class Server:
         except OSError as e:
             logging.error("action: receive_message | result: fail | error: {e}")
         finally:
-            server_protocol.close()
             if self.is_done():
+                logging.info("action: sorteo | result: success")
                 self.shutdown()
+                return
+            server_protocol.close()
 
     def __accept_new_connection(self):
         """
