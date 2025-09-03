@@ -242,7 +242,8 @@ func (c *Client) StartClientLoop(done <-chan bool) {
 				break
 			}
 
-			response, err := c.clientProtocol.recvResponseBatch()
+			//response, err := c.clientProtocol.recvResponseBatch()
+			_, err := c.clientProtocol.recvResponseBatch()
 			if err != nil {
 				log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v",
 					c.config.ID,
