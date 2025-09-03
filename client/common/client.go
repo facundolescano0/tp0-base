@@ -79,6 +79,7 @@ func (c *Client) createClientSocket() error {
 			c.config.ID,
 			err,
 		)
+		return err
 	}
 	c.conn = conn
 	return nil
@@ -278,6 +279,10 @@ func (c *Client) StartClientLoop(done <-chan bool) {
 
 				response_result, err = c.clientProtocol.recvResponseWinners()
 				if err == nil && response_result != nil {
+					c.conn.Close()
+					c.conn = nil
+					c.clientProtocol = nil
+					c.reconnectOnce()
 					break
 				}
 				if err != nil {
