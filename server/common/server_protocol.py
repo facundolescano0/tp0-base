@@ -17,6 +17,7 @@ class ServerProtocol:
     BATCH_FAIL = 4
     SEND_WINNERS = 5
     NOT_READY = 6
+    NO_WINNERS = 0
 
 
     def __init__(self, client_sock, max_length):
@@ -82,6 +83,12 @@ class ServerProtocol:
 
 
     def send_winners(self, winners):
+
+        if len(winners) == 0:
+            self.client_sock.sendall(bytes([self.SEND_WINNERS]))
+            self.client_sock.sendall((self.NO_WINNERS).to_bytes(ServerProtocol.SIZE, 'big'))
+            return
+
         msg = ""
         first = True
         for winner in winners:
