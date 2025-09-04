@@ -75,7 +75,13 @@ func (c *Client) sendBet(client_protocol *ClientProtocol){
 		Birthdate:  c.config.Birth,
 		Number:     c.config.Number,
 	}
-	client_protocol.sendBet(bet)
+	err := client_protocol.sendBet(bet)
+	if err!= nil {
+		log.Errorf("action: send_message | result: fail | client_id: %v | error: %v",
+				c.config.ID,
+				err,
+			)
+	}
 }
 
 func (c *Client) recvResponseBet(client_protocol *ClientProtocol) {
