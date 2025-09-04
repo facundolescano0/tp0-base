@@ -102,25 +102,28 @@ func main() {
 		log.Criticalf("%s", err)
 	}
 
+	// Print program config with debugging purposes
+	PrintConfig(v)
+	id := v.GetString("id")
+	clientConfig := common.ClientConfig{
+		ServerAddress: v.GetString("server.address"),
+		ID:            id,
+		LoopAmount:    v.GetInt("loop.amount"),
+		LoopPeriod:    v.GetDuration("loop.period"),
+	}
+
+	client := common.NewClient(clientConfig)
+
 	sigs := make(chan os.Signal, 1)
     signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT)
     done := make(chan bool, 1)
 
 	go func() {
 		<-sigs
+		log.Infof("action: SIGTERM | result: success | client_id: %v", id)
+		client.Shutdown()
 		done <- true
 	}()
-
-	// Print program config with debugging purposes
-	PrintConfig(v)
-
-	clientConfig := common.ClientConfig{
-		ServerAddress: v.GetString("server.address"),
-		ID:            v.GetString("id"),
-		LoopAmount:    v.GetInt("loop.amount"),
-		LoopPeriod:    v.GetDuration("loop.period"),
-	}
-
-	client := common.NewClient(clientConfig)
-	client.StartClientLoop(done)
+	
+	client.StartClientLoop()
 }
