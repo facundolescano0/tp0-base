@@ -164,6 +164,10 @@ func (cp *ClientProtocol) recvResponseWinners() ([]string, error) {
         return nil, fmt.Errorf("invalid winners size: %d", size)
     }
 
+	if size == 0 {
+		return []string{}, nil
+	}
+
     buf := make([]byte, size)
     total := 0
     for total < size {

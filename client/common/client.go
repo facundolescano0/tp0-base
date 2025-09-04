@@ -18,6 +18,7 @@ const (
     DocumentIdx
     BirthdateIdx
     NumberIdx
+	TIME_TO_RETRY = 5
 )
 
 var log = logging.MustGetLogger("log")
@@ -79,20 +80,26 @@ func (c *Client) createClientSocket() error {
 			c.config.ID,
 			err,
 		)
+		return err
 	}
 	c.conn = conn
 	return nil
 }
 
-func (c *Client) try_connect(max_retries int) {
+func (c *Client) try_connect(max_retries int) error {
 	for i := 0; i < max_retries; i++ {
-		c.createClientSocket()
+		err := c.createClientSocket()
 		if c.conn != nil {
 			c.clientProtocol = NewClientProtocol(c.conn, c.MaxBytesPerBatch)
 			break
 		}
+		if err != nil{
+			return err
+		}
 	}
+	return nil
 }
+
 func (c *Client) splitBet(line string) (Bet, error) {
 	record := strings.Split(line, ",")
 	
@@ -164,31 +171,26 @@ func (c *Client) reconnectOnce() {
 }
 
 // StartClientLoop Send messages to the client until some time threshold is met
-func (c *Client) StartClientLoop(done <-chan bool) {
+func (c *Client) StartClientLoop(done <-chan bool) error {
 
-	max_retries := 5
-	c.try_connect(max_retries)
-
-	agencyID, err := strconv.Atoi(c.config.ID)
+	retries := 1
+	err := c.try_connect(retries)
 	if err != nil {
-		log.Errorf("action: connect | result: fail | client_id: %v | error: %v",
-			c.config.ID,
-			err,
-		)
-		return
+		return err
 	}
 
 	if c.conn == nil {
 		log.Errorf("action: connect | result: fail | client_id: %v | error: no se pudo conectar",
 			c.config.ID,
 		)
-		return
+		return nil
 	}
+
 
 	file, err := os.Open(c.config.AgencyPath)
     if err != nil {
-        fmt.Printf("Error opening file: %v\n", err)
-        return
+        log.Errorf("Error opening file: %v\n", err)
+        return err
     }
     defer file.Close() 
 
@@ -222,7 +224,7 @@ func (c *Client) StartClientLoop(done <-chan bool) {
 		case <-done:
 			log.Infof("action: shutdown | result: success | client_id: %v", c.config.ID)
 			c.Shutdown()
-			return
+			return nil
 		default:
 
 			err = c.clientProtocol.sendBatch(batch)
@@ -231,8 +233,7 @@ func (c *Client) StartClientLoop(done <-chan bool) {
 					c.config.ID,
 					err,
 				)
-				c.keepRunning = false
-				break
+				return err
 			}
 
 			if batches_finished {
@@ -246,12 +247,22 @@ func (c *Client) StartClientLoop(done <-chan bool) {
 					c.config.ID,
 					err,
 				)
-				c.keepRunning = false
-				break
+				return err
 			}
 			// Wait a time between sending one message and the next one
 			// time.Sleep(c.config.LoopPeriod)
 		}
+	}
+
+	c.conn.Close()
+
+	agencyID, err := strconv.Atoi(c.config.ID)
+	if err != nil {
+		log.Errorf("action: connect | result: fail | client_id: %v | error: %v",
+			c.config.ID,
+			err,
+		)
+		return err
 	}
 
 	var response_result = []string{}
@@ -260,8 +271,11 @@ func (c *Client) StartClientLoop(done <-chan bool) {
 		case <-done:
 			log.Infof("action: shutdown | result: success | client_id: %v", c.config.ID)
 			c.Shutdown()
-			return
+			return nil
 		default:
+			retries := 1
+			c.try_connect(retries)
+
 			if c.clientProtocol != nil {
 				err = c.clientProtocol.sendWinnersRequest(agencyID)
 				if err != nil {
@@ -269,37 +283,29 @@ func (c *Client) StartClientLoop(done <-chan bool) {
 						c.config.ID,
 						err,
 					)
-					c.conn.Close()
-					c.conn = nil
-					c.clientProtocol = nil
-					c.reconnectOnce()
-					continue
+					return err
 				}
 
 				response_result, err = c.clientProtocol.recvResponseWinners()
-				if err == nil && response_result != nil {
-					c.conn.Close()
-					c.conn = nil
-					c.clientProtocol = nil
-					c.reconnectOnce()
-					break
-				}
 				if err != nil {
 					log.Errorf("action: receive_winners | result: fail | client_id: %v | error: %v",
 						c.config.ID,
 						err,
 					)
-					break
+					return err
 				}
-				break
-			} else {
-					c.reconnectOnce()
+				if response_result != nil {
+					amount_winners := c.processWinnersResponse(response_result)
+					log.Infof("action: consulta_ganadores | result: success | cant_ganadores: %d", amount_winners)
+					c.Shutdown()
+					return nil
+				}
 			}
+			c.conn.Close()
+    		time.Sleep(TIME_TO_RETRY * time.Second)
 		}
 	}
-	amount_winners := c.processWinnersResponse(response_result)
-	log.Infof("action: consulta_ganadores | result: success | cant_ganadores: %d", amount_winners)
-	c.Shutdown()
+	return nil
 }
 
 func (c *Client) Shutdown() {

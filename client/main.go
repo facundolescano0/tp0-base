@@ -137,5 +137,11 @@ func main() {
 	}
 
 	client := common.NewClient(clientConfig)
-	client.StartClientLoop(done)
+	if err := client.StartClientLoop(done); err != nil {
+		log.Criticalf("action: start_client_loop | result: fail | client_id: %v | error: %v",
+			clientConfig.ID,
+			err,
+		)
+	}
+	log.Infof("action: client_ended | result: success | client_id: %v", clientConfig.ID)
 }
