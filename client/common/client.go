@@ -254,7 +254,7 @@ func (c *Client) StartClientLoop(done <-chan bool) error {
 		}
 	}
 
-	c.conn.Close()
+	c.closeConn()
 
 	agencyID, err := strconv.Atoi(c.config.ID)
 	if err != nil {
@@ -283,6 +283,7 @@ func (c *Client) StartClientLoop(done <-chan bool) error {
 						c.config.ID,
 						err,
 					)
+					c.closeConn()
 					return err
 				}
 
@@ -292,6 +293,7 @@ func (c *Client) StartClientLoop(done <-chan bool) error {
 						c.config.ID,
 						err,
 					)
+					c.closeConn()
 					return err
 				}
 				if response_result != nil {
@@ -301,16 +303,23 @@ func (c *Client) StartClientLoop(done <-chan bool) error {
 					return nil
 				}
 			}
-			c.conn.Close()
+
+			c.closeConn()
     		time.Sleep(TIME_TO_RETRY * time.Second)
 		}
 	}
 	return nil
 }
 
+func (c *Client) closeConn() {
+    if c.conn != nil {
+        _ = c.conn.Close()
+        c.conn = nil
+    }
+    c.clientProtocol = nil
+}
+
 func (c *Client) Shutdown() {
 	c.keepRunning = false
-	if c.conn != nil {
-		c.conn.Close()
-	}
+	c.closeConn()
 }
