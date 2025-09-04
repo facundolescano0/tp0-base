@@ -21,7 +21,6 @@ class Server:
         self._keep_running = True
         self.client_sock = None
         self.agencies_sent_all = 0
-        self.winners = []
         self.clients_amount = clients_amount
 
     def run(self):
@@ -79,13 +78,10 @@ class Server:
     def recv_winners_request(self, server_protocol):
         return server_protocol.recv_winners_request()
 
-    def make_draw(self):
-        bets = load_bets()
-        self.winners = [(bet.agency, bet.document) for bet in bets if has_won(bet)]
-
 
     def send_winners(self, agency_id, server_protocol):
-        winners = [bet.document for bet in self.winners if bet.agency == agency_id]
+        bets = load_bets()
+        winners = [bet.document for bet in bets if bet.agency == agency_id and has_won(bet)]
         server_protocol.send_winners(winners)
 
     def __handle_client_connection(self, server_protocol):
@@ -110,7 +106,6 @@ class Server:
                     if batch == ServerProtocol.BATCH_FINISHED:
                         self.agencies_sent_all += 1
                         if self.agencies_sent_all == self.clients_amount:
-                            self.make_draw()
                             logging.info("action: sorteo | result: success")
                         break
                     amount_of_bets = len(batch)
