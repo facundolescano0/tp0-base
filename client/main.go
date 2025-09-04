@@ -113,11 +113,6 @@ func main() {
     signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT)
     done := make(chan bool, 1)
 
-	go func() {
-		<-sigs
-		done <- true
-	}()
-
 	// Print program config with debugging purposes
 	PrintConfig(v)
 
@@ -137,5 +132,13 @@ func main() {
 	}
 
 	client := common.NewClient(clientConfig)
-	client.StartClientLoop(done)
+
+	go func() {
+		<-sigs
+		log.Infof("action: SIGTERM | result: in_progress")
+		client.Shutdown()
+		done <- true
+	}()
+
+	client.StartClientLoop()
 }

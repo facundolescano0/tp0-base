@@ -17,6 +17,7 @@ const (
     DocumentIdx
     BirthdateIdx
     NumberIdx
+	MaxSizeBatch = 8192
 )
 
 var log = logging.MustGetLogger("log")
@@ -61,7 +62,7 @@ func NewClient(config ClientConfig) *Client {
 	client := &Client{
 		config: config,
 		keepRunning: true,
-		MaxBytesPerBatch: 8192,
+		MaxBytesPerBatch: MaxSizeBatch,
 	}
 	return client
 }
@@ -161,7 +162,7 @@ func (c *Client) LoadBatchfromfile(scanner *bufio.Scanner, lastBet Bet) ([]Bet, 
 
 
 // StartClientLoop Send messages to the client until some time threshold is met
-func (c *Client) StartClientLoop(done <-chan bool) {
+func (c *Client) StartClientLoop() {
 
 	c.try_connect()
 
@@ -192,45 +193,42 @@ func (c *Client) StartClientLoop(done <-chan bool) {
 			)
 			break
 		}
+
+		// If batch is empty, we need to check if we have a last bet to send
 		if batch == nil || len(batch) == 0 {
 			if next_last_bet != (Bet{}) {
             	batch = []Bet{next_last_bet}
 				next_last_bet = Bet{}
 				c.keepRunning = false
         	} else {
+				// No more bets to send, we are done
 				break
 			}
 		}
-		select {
-		case <-done:
-			log.Infof("action: shutdown | result: success | client_id: %v", c.config.ID)
-			c.Shutdown()
-			return
-		default:
 
-			err = c.sendBatch(batch)
-			if err != nil {
-				log.Errorf("action: send_message | result: fail | client_id: %v | error: %v",
-					c.config.ID,
-					err,
-				)
-				c.keepRunning = false
-				break
-			}
-			 response, err := c.recvResponseBatch()
-			//_, err := c.recvResponseBatch()
-			if err != nil {
-				log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v",
-					c.config.ID,
-					err,
-				)
-				c.keepRunning = false
-				break
-			}
-			last_bet = next_last_bet
-			c.loggingResponse(response)
-
+		err = c.sendBatch(batch)
+		if err != nil {
+			log.Errorf("action: send_message | result: fail | client_id: %v | error: %v",
+				c.config.ID,
+				err,
+			)
+			c.keepRunning = false
+			break
 		}
+
+		response, err := c.recvResponseBatch()
+		//_, err := c.recvResponseBatch()
+		if err != nil {
+			log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v",
+				c.config.ID,
+				err,
+			)
+			c.keepRunning = false
+			break
+		}
+		last_bet = next_last_bet
+		c.loggingResponse(response)
+
 	}
 
 	log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)

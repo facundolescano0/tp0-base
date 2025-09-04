@@ -88,6 +88,7 @@ func (cp *ClientProtocol) recvOneByte() (int, error) {
         }
         total += n
     }
+	// Return the byte as an integer
     return int(buf[0]), nil
 }
 

@@ -12,6 +12,7 @@ class Server:
     IDX_DOCUMENT = 3
     IDX_BIRTHDATE = 4
     IDX_NUMBER = 5
+    MAX_SIZE_BATCH = 8192
     def __init__(self, port, listen_backlog):
         # Initialize server socket
         self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -33,12 +34,13 @@ class Server:
             try:
                 self.client_sock = self.__accept_new_connection()
                 if self.client_sock:
-                    server_protocol = ServerProtocol(self.client_sock, max_length=8192)
+                    server_protocol = ServerProtocol(self.client_sock, max_length=self.MAX_SIZE_BATCH)
                     self.__handle_client_connection(server_protocol)
                     self.client_sock = None
             except OSError as e:
                 if e.errno == errno.EBADF:
                     break
+                logging.error(f"action: server loop | result: fail | error: {e}")
                 raise
 
     def recv_bet(self, server_protocol):
