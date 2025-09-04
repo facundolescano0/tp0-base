@@ -100,11 +100,9 @@ class Server:
         draw_winners = {}
         for bet in bets:
             if has_won(bet):
-                logging.info(f"action: lottery | result: winner_found | agency: {bet.agency} | document: {bet.document} | number: {bet.number}")
                 if bet.agency not in draw_winners:
                     draw_winners[bet.agency] = []
                 draw_winners[bet.agency].append(bet.document)
-        logging.info(f"action: lottery | result: success | winners: {draw_winners}")
         self.draw_winners = draw_winners
 
 
@@ -153,7 +151,6 @@ class Server:
                         ready = (self.agencies_sent_all == self.clients_amount)
                         if ready:
                             winners = self.get_winners(agency_id)
-                            logging.info(f"action: winners_request | result: success | agency_id: {agency_id} | winners: {winners}")
                     if ready:
                         winners_sent = server_protocol.send_winners(winners)
                     else:
