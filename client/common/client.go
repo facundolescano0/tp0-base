@@ -92,13 +92,10 @@ func (c *Client) recvResponseBatch() (int, error) {
 }
 
 
-func (c *Client) try_connect(max_retries int) {
-	for i := 0; i < max_retries; i++ {
-		c.createClientSocket()
-		if c.conn != nil {
-			c.clientProtocol = NewClientProtocol(c.conn, c.MaxBytesPerBatch)
-			break
-		}
+func (c *Client) try_connect() {
+	c.createClientSocket()
+	if c.conn != nil {
+		c.clientProtocol = NewClientProtocol(c.conn, c.MaxBytesPerBatch)
 	}
 }
 func (c *Client) splitBet(line string) (Bet, error) {
@@ -162,11 +159,11 @@ func (c *Client) LoadBatchfromfile(scanner *bufio.Scanner, lastBet Bet) ([]Bet, 
     return nil, Bet{}, nil
 }
 
+
 // StartClientLoop Send messages to the client until some time threshold is met
 func (c *Client) StartClientLoop(done <-chan bool) {
 
-	max_retries := 5
-	c.try_connect(max_retries)
+	c.try_connect()
 
 	if c.conn == nil {
 		log.Errorf("action: connect | result: fail | client_id: %v | error: no se pudo conectar",
@@ -185,7 +182,6 @@ func (c *Client) StartClientLoop(done <-chan bool) {
     scanner := bufio.NewScanner(file)
 	last_bet := Bet{}
 
-	// batches := c.SplitBetsInBatches(bets, c.config.BatchAmount, c.MaxBytesPerBatch)
 	for c.keepRunning {
 
 		batch, next_last_bet, err := c.LoadBatchfromfile(scanner, last_bet)
@@ -232,25 +228,28 @@ func (c *Client) StartClientLoop(done <-chan bool) {
 				break
 			}
 			last_bet = next_last_bet
+			c.loggingResponse(response)
 
-			responseStr := ""
-			if response == BATCH_OK {
-				responseStr = "success"
-			} else {
-				responseStr = "fail"
-			}
-			log.Infof("action: receive_message | result: %v | client_id: %v",
-				responseStr,
-				c.config.ID,
-			)
-			// Wait a time between sending one message and the next one
-			// time.Sleep(c.config.LoopPeriod)
 		}
 	}
 
 	log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
 	c.Shutdown()
 }
+
+func (c *Client) loggingResponse(response int) {
+	responseStr := ""
+	if response == BATCH_OK {
+		responseStr = "success"
+	} else {
+		responseStr = "fail"
+	}
+	log.Infof("action: receive_message | result: %v | client_id: %v",
+		responseStr,
+		c.config.ID,
+	)
+}
+
 
 func (c *Client) Shutdown() {
 	c.keepRunning = false

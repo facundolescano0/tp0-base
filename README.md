@@ -208,3 +208,5 @@ En este ejercicio se implementó un protocolo de comunicación donde el cliente 
 ### Ejercicio N°6:
 Para la ejecución de este ejercicio, se debe levantar el servidor y los clientes con `make docker-compose-up` y luego observar los logs con `make docker-compose-logs`.
 
+En este ejercicio se modificó el cliente para que reciba por docker volumes el archivo de apuesta correspondiente y se armó la logica de ir leyendo el archivo hasta llenar un batch (ya sea por maxima cantidad de apuestas o por limite de bytes) y enviarlo al servidor. El protocolo utilizado fue casi el mismo que en el ejercicio 5. La condicion de corte de este ejercicio es por medio de un cierre de sockets del cliente, el servidor detecta el cierre y sale del loop.
+
