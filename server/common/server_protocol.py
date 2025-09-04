@@ -65,9 +65,9 @@ class ServerProtocol:
 
         batch = []
         for line in lines:
-            campos = line.split('|')
-            if len(campos) == 6:
-                batch.append(campos)
+            fields = line.split('|')
+            if len(fields) == 6:
+                batch.append(fields)
             else:
                 return None
         return batch

@@ -46,7 +46,7 @@ def main():
     initialize_log(logging_level)
     
     def handle_sigterm(signum, frame):
-        logging.info("action: server_shutdown | result: success ")
+        logging.info("action: receive signal | result: success ")
         server.shutdown()
 
     # Log config parameters at the beginning of the program to verify the configuration

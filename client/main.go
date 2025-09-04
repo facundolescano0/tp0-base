@@ -113,11 +113,6 @@ func main() {
     signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT)
     done := make(chan bool, 1)
 
-	go func() {
-		<-sigs
-		done <- true
-	}()
-
 	// Print program config with debugging purposes
 	PrintConfig(v)
 
@@ -137,7 +132,15 @@ func main() {
 	}
 
 	client := common.NewClient(clientConfig)
-	if err := client.StartClientLoop(done); err != nil {
+		go func() {
+		<-sigs
+		log.Infof("action: signal_received | result: success | client_id: %v", clientConfig.ID)
+		client.Shutdown()
+		done <- true
+	}()
+
+
+	if err := client.StartClientLoop(); err != nil {
 		log.Criticalf("action: start_client_loop | result: fail | client_id: %v | error: %v",
 			clientConfig.ID,
 			err,

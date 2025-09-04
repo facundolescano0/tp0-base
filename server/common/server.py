@@ -53,8 +53,8 @@ class Server:
         self.shutdown()
 
     def recv_bet(self, server_protocol):
-        if campos := server_protocol.recv_bet():
-            return campos
+        if fields := server_protocol.recv_bet():
+            return fields
         logging.error("action: receive_message | result: fail | error: formato de mensaje incorrecto")
         return None
 
