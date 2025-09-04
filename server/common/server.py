@@ -52,14 +52,12 @@ class Server:
         client socket will also be closed
         """
         try:
-            # TODO: Modify the receive to avoid short-reads
             id, name, lastname, nid, birth, number = self.recv_bet(server_protocol)
 
             bet = Bet(agency=id, first_name=name, last_name=lastname, document=nid, birthdate=birth, number=number)
             store_bets([bet])
             logging.info(f'action: apuesta_almacenada | result: success | dni: {nid} | numero: {number}')
             
-            # TODO: Modify the send to avoid short-writes
             self.send_response_bet(server_protocol, nid, number)
 
         except OSError as e:

@@ -111,7 +111,6 @@ func (c *Client) StartClientLoop(done <-chan bool) {
 			c.createClientSocket()
 			client_protocol := NewClientProtocol(c.conn)
 
-			// TODO: Modify the send to avoid short-write
 			c.sendBet(client_protocol)
 
 			c.recvResponseBet(client_protocol)

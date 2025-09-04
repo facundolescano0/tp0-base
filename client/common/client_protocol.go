@@ -7,6 +7,12 @@ import (
     "strings"   
 )
 
+const (
+    FIELD_COUNT_RESPONSE = 2
+	NID = 0
+	NUMBER = 1
+)
+
 type ClientProtocol struct {
 	conn   net.Conn
 }
@@ -49,8 +55,8 @@ func (cp *ClientProtocol) recvResponseBet() (string, string, error) {
 	}
 	msg = strings.TrimSpace(msg)
 	parts := strings.Split(msg, "|")
-	if len(parts) != 2 {
+	if len(parts) != FIELD_COUNT_RESPONSE {
 		return "", "", fmt.Errorf("invalid response format")
 	}
-	return parts[0], parts[1], nil
+	return parts[NID], parts[NUMBER], nil
 }

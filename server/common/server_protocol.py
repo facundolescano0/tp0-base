@@ -1,7 +1,8 @@
 class ServerProtocol:
+    MAX_LENGTH = 1024
     def __init__(self, client_sock):
         self.client_sock = client_sock
-        self.max_length = 1024
+        self.max_length = self.MAX_LENGTH
 
     def recv_all(self):
         buffer = b""
