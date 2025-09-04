@@ -19,6 +19,7 @@ const (
     BirthdateIdx
     NumberIdx
 	TIME_TO_RETRY = 5
+	MAX_LENGTH = 8192
 )
 
 var log = logging.MustGetLogger("log")
@@ -63,7 +64,7 @@ func NewClient(config ClientConfig) *Client {
 	client := &Client{
 		config: config,
 		keepRunning: true,
-		MaxBytesPerBatch: 8192,
+		MaxBytesPerBatch: MAX_LENGTH,
 	}
 	return client
 }
