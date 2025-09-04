@@ -86,17 +86,17 @@ func (c *Client) createClientSocket() error {
 	return nil
 }
 
-func (c *Client) try_connect(max_retries int) error {
-	for i := 0; i < max_retries; i++ {
-		err := c.createClientSocket()
-		if c.conn != nil {
-			c.clientProtocol = NewClientProtocol(c.conn, c.MaxBytesPerBatch)
-			break
-		}
-		if err != nil{
-			return err
-		}
+func (c *Client) try_connect() error {
+	err := c.createClientSocket()
+	
+	if err != nil{
+		return err
 	}
+	
+	if c.conn != nil {
+		c.clientProtocol = NewClientProtocol(c.conn, c.MaxBytesPerBatch)
+	}
+	
 	return nil
 }
 
@@ -161,40 +161,8 @@ func (c *Client) processWinnersResponse(response []string) int {
 	return len(response)
 }
 
-func (c *Client) reconnectOnce() {
-    time.Sleep(1 * time.Second)
-    retries := 1
-    c.try_connect(retries)
-    if c.conn != nil {
-        c.clientProtocol = NewClientProtocol(c.conn, c.MaxBytesPerBatch)
-    }
-}
+func (c *Client) send_batch_loop(scanner *bufio.Scanner, done <-chan bool) error {
 
-// StartClientLoop Send messages to the client until some time threshold is met
-func (c *Client) StartClientLoop(done <-chan bool) error {
-
-	retries := 1
-	err := c.try_connect(retries)
-	if err != nil {
-		return err
-	}
-
-	if c.conn == nil {
-		log.Errorf("action: connect | result: fail | client_id: %v | error: no se pudo conectar",
-			c.config.ID,
-		)
-		return nil
-	}
-
-
-	file, err := os.Open(c.config.AgencyPath)
-    if err != nil {
-        log.Errorf("Error opening file: %v\n", err)
-        return err
-    }
-    defer file.Close() 
-
-    scanner := bufio.NewScanner(file)
 	last_bet := Bet{}
 	var i int = 0
 	var batches_finished bool = false
@@ -206,17 +174,19 @@ func (c *Client) StartClientLoop(done <-chan bool) error {
 				c.config.ID,
 				err,
 			)
-			break
+			return err
 		}
 
 		last_bet = next_last_bet
 
+		// If the batch is empty but last_bet is not, we need to send the last bet
 		if batch == nil || len(batch) == 0 {
 			if last_bet != (Bet{}) {
             	batch = []Bet{last_bet}
 				last_bet = Bet{}
 
 			} else {
+				// If there are no more bets to process, we can finish
 				batches_finished = true
 			}
 		}
@@ -240,7 +210,6 @@ func (c *Client) StartClientLoop(done <-chan bool) error {
 				break
 			}
 
-			//response, err := c.clientProtocol.recvResponseBatch()
 			_, err := c.clientProtocol.recvResponseBatch()
 			if err != nil {
 				log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v",
@@ -253,9 +222,10 @@ func (c *Client) StartClientLoop(done <-chan bool) error {
 			// time.Sleep(c.config.LoopPeriod)
 		}
 	}
+	return nil
+}
 
-	c.closeConn()
-
+func (c *Client) recv_winners(done <-chan bool) error {
 	agencyID, err := strconv.Atoi(c.config.ID)
 	if err != nil {
 		log.Errorf("action: connect | result: fail | client_id: %v | error: %v",
@@ -273,8 +243,7 @@ func (c *Client) StartClientLoop(done <-chan bool) error {
 			c.Shutdown()
 			return nil
 		default:
-			retries := 1
-			c.try_connect(retries)
+			c.try_connect()
 
 			if c.clientProtocol != nil {
 				err = c.clientProtocol.sendWinnersRequest(agencyID)
@@ -308,6 +277,40 @@ func (c *Client) StartClientLoop(done <-chan bool) error {
     		time.Sleep(TIME_TO_RETRY * time.Second)
 		}
 	}
+	return nil
+}
+
+// StartClientLoop Send messages to the client until some time threshold is met
+func (c *Client) StartClientLoop(done <-chan bool) error {
+
+	err := c.try_connect()
+	if err != nil {
+		return err
+	}
+
+	if c.conn == nil {
+		log.Errorf("action: connect | result: fail | client_id: %v | error: no se pudo conectar",
+			c.config.ID,
+		)
+		return nil
+	}
+
+
+	file, err := os.Open(c.config.AgencyPath)
+    if err != nil {
+        log.Errorf("Error opening file: %v\n", err)
+        return err
+    }
+    defer file.Close() 
+
+    scanner := bufio.NewScanner(file)
+
+	c.send_batch_loop(scanner, done)
+
+	c.closeConn()
+
+	c.recv_winners(done)
+
 	return nil
 }
 
