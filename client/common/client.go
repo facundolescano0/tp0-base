@@ -83,40 +83,14 @@ func (c *Client) createClientSocket() error {
 	return nil
 }
 
-func (c *Client) sendBet(){
-	bet := Bet{
-		Agency:     c.config.ID,
-		FirstName:  c.config.Name,
-		LastName:   c.config.Surname,
-		Document:   c.config.NID,
-		Birthdate:  c.config.Birth,
-		Number:     c.config.Number,
-	}
-	c.clientProtocol.sendBet(bet)
-}
-
 func (c *Client) sendBatch(batch []Bet) error {
 	return c.clientProtocol.sendBatch(batch)
 }
 
-func (c *Client) recvResponseBatch() (string, error) {
+func (c *Client) recvResponseBatch() (int, error) {
 	return c.clientProtocol.recvResponseBatch()
 }
 
-func (c *Client) recvResponseBet() {
-	nid, number, err := c.clientProtocol.recvResponseBet()
-	if err!= nil {
-		log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v",
-				c.config.ID,
-				err,
-			)
-	}
-
-	log.Infof("action: apuesta_enviada | result: success | dni: %v | numero: %v",
-		nid,
-		number,
-	)
-}
 
 func (c *Client) try_connect(max_retries int) {
 	for i := 0; i < max_retries; i++ {
@@ -168,8 +142,7 @@ func (c *Client) LoadBatchfromfile(scanner *bufio.Scanner, lastBet Bet) ([]Bet, 
 		betStr := c.clientProtocol.serializeBet(bet)
 		betBytes := len(betStr)
 
-		headerBytes := len(c.clientProtocol.serializeHeader(len(batch) + 1))
-		totalBytes := headerBytes + batchBytes + betBytes
+		totalBytes := batchBytes + betBytes
 
 		if len(batch) >= c.config.BatchAmount || totalBytes > c.MaxBytesPerBatch {
 			return batch, bet, nil
@@ -259,9 +232,16 @@ func (c *Client) StartClientLoop(done <-chan bool) {
 				break
 			}
 			last_bet = next_last_bet
+
+			responseStr := ""
+			if response == BATCH_OK {
+				responseStr = "success"
+			} else {
+				responseStr = "fail"
+			}
 			log.Infof("action: receive_message | result: %v | client_id: %v",
-			response,
-			c.config.ID,
+				responseStr,
+				c.config.ID,
 			)
 			// Wait a time between sending one message and the next one
 			// time.Sleep(c.config.LoopPeriod)

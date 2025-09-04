@@ -1,10 +1,20 @@
 package common
 
 import (
-    "bufio"
+    "encoding/binary"
     "fmt"
     "net"
-    "strings"   
+    "strings"
+)
+
+const (
+    BATCH_FINISHED = 0
+    ONE_BYTE = 1
+    SIZE = 2
+
+    // server to client
+    BATCH_OK = 3
+    BATCH_FAIL = 4
 )
 
 type ClientProtocol struct {
@@ -25,57 +35,69 @@ func (cp *ClientProtocol) serializeBet(bet Bet) string {
         bet.Agency, bet.FirstName, bet.LastName, bet.Document, bet.Birthdate, bet.Number)
 }
 
-func (cp *ClientProtocol) serializeHeader(betAmount int) string {
-    return fmt.Sprintf("%d\n", betAmount)
-}
-
-func (cp *ClientProtocol) sendAllMessage(message string) error {
-	total := 0
-    for total < len(message) {
-        n, err := cp.conn.Write([]byte(message[total:]))
+func (cp *ClientProtocol) sendAllBytes(buf []byte) error {
+    total := 0
+    for total < len(buf) {
+        n, err := cp.conn.Write(buf[total:])
         if err != nil {
             return err
         }
         total += n
     }
-	return nil
+    return nil
 }
 
-func (cp *ClientProtocol) sendBet(bet Bet) {
-	msg := cp.serializeBet(bet)
-	cp.sendAllMessage(msg)
+func (cp *ClientProtocol) sendAllMessage(message string) error {
+    return cp.sendAllBytes([]byte(message))
+}
+
+func (cp *ClientProtocol) sendBatchSize(size int) error {
+    buf := make([]byte, SIZE)
+    binary.BigEndian.PutUint16(buf, uint16(size))
+    return cp.sendAllBytes(buf)
 }
 
 func (cp *ClientProtocol) sendBatch(batch []Bet) error {
-	header := cp.serializeHeader(len(batch))
-	message := header
+	//if len(batch) == 0 {
+      //  return cp.sendBatchSize(BATCH_FINISHED) 
+    //}
+
+	var msg strings.Builder
 	for _, bet := range batch {
-		message += cp.serializeBet(bet)
+		msg.WriteString(cp.serializeBet(bet))
 	}
-	if len(message) > cp.maxLength {
+
+	message := msg.String()
+	sizeBatch := len(message)
+
+	if sizeBatch > cp.maxLength {
 		return fmt.Errorf("message too long")
 	}
-	return cp.sendAllMessage(message)
+
+    if err := cp.sendBatchSize(sizeBatch); err != nil { return err }
+    return cp.sendAllMessage(message)
 }
 
-func (cp *ClientProtocol) recvResponseBet() (string, string, error) {
-	msg, err := bufio.NewReader(cp.conn).ReadString('\n')
-	if err != nil {
-		return "", "", err
-	}
-	msg = strings.TrimSpace(msg)
-	parts := strings.Split(msg, "|")
-	if len(parts) != 2 {
-		return "", "", fmt.Errorf("invalid response format")
-	}
-	return parts[0], parts[1], nil
+func (cp *ClientProtocol) recvOneByte() (int, error) {
+    buf := make([]byte, ONE_BYTE)
+    total := 0
+    for total < ONE_BYTE {
+        n, err := cp.conn.Read(buf[total:])
+        if err != nil {
+            return 0, err
+        }
+        total += n
+    }
+    return int(buf[0]), nil
 }
 
-func (cp *ClientProtocol) recvResponseBatch() (string, error) {
-	msg, err := bufio.NewReader(cp.conn).ReadString('\n')
+func (cp *ClientProtocol) recvResponseBatch() (int, error) {
+	batchResponse, err := cp.recvOneByte()
 	if err != nil {
-		return "", err
+		return 0, err
 	}
-	response := strings.TrimSpace(msg)
-	return response, nil
+	if batchResponse != BATCH_OK && batchResponse != BATCH_FAIL {
+		return 0, fmt.Errorf("unexpected batch response: %d", batchResponse)
+	}
+	return batchResponse, nil
 }

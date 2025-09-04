@@ -1,66 +1,66 @@
 import socket
+import logging
 
 
 class ServerProtocol:
-    HEADER = 0
+    BATCH_FINISHED = 0
+    ONE_BYTE = 1
+    SIZE = 2
+    BET_FIELDS = 6
+
+    # server to client
+    BATCH_OK = 3
+    BATCH_FAIL = 4
+
     def __init__(self, client_sock, max_length):
         self.client_sock = client_sock
         self.max_length = max_length
 
-    def recv_all(self):
-        buffer = b""
-        while True:
-            chunk = self.client_sock.recv(self.max_length-len(buffer))
+
+    def recv_all_bytes(self, bytes_amount):
+        buf = bytearray()
+        while len(buf) < bytes_amount:
+            chunk = self.client_sock.recv(bytes_amount - len(buf))
             if not chunk:
-                break 
-            buffer += chunk
-            if b"\n" in chunk:
-                break
-        msg = buffer.rstrip().decode('utf-8')
-        return msg
-
-    def recv_bet(self):
-        msg = self.recv_all()
-        campos = msg.split('|')
-        if len(campos) == 6:
-            return campos
-        else:
-            return None
-
-    def send_response_bet(self, nid, number):
-        response = f"{nid}|{number}\n"
-        self.client_sock.sendall(response.encode('utf-8'))
-
+                raise ConnectionError("socket closed while reading")
+            buf.extend(chunk)
+        return bytes(buf)
+    
+    def recv_batch_size(self):
+        data = self.recv_all_bytes(ServerProtocol.SIZE)
+        num = int.from_bytes(data, 'big')
+        return num
+    
     def recv_batch(self):
-        data = self.recv_all()
-        if not data:
+        bytes_amount = self.recv_batch_size()
+        if not bytes_amount:
             return None
-        lines = data.splitlines()
+
+        if bytes_amount < 0 or bytes_amount > self.max_length:
+            return None
+
+        data = self.recv_all_bytes(bytes_amount)
+        try:
+            text = data.decode('utf-8')
+        except UnicodeDecodeError:
+            logging.info("invalid UTF-8 in batch payload")
+            return None
+
+        lines = text.splitlines()
         if not lines:
             return None
-        header = lines[ServerProtocol.HEADER]
-
-        try:
-            bet_count = int(header.strip())
-        except ValueError:
-            return None
         
-        if len(lines[1:]) < bet_count:
-            return None
-
         batch = []
-        for line in lines[1:1+bet_count]:
+        for line in lines:
             campos = line.split('|')
-            if len(campos) == 6:
+            if len(campos) == ServerProtocol.BET_FIELDS:
                 batch.append(campos)
             else:
                 return None
-            
         return batch
 
-    def send_response_batch(self, message):
-        response = f"{message}\n"
-        self.client_sock.sendall(response.encode('utf-8'))
+    def send_response_batch(self, result):
+        self.client_sock.sendall(bytes([result]))
         
 
     def close(self):

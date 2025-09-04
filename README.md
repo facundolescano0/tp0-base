@@ -178,3 +178,33 @@ Se espera que se redacte una sección del README en donde se indique cómo ejecu
 Se proveen [pruebas automáticas](https://github.com/7574-sistemas-distribuidos/tp0-tests) de caja negra. Se exige que la resolución de los ejercicios pase tales pruebas, o en su defecto que las discrepancias sean justificadas y discutidas con los docentes antes del día de la entrega. El incumplimiento de las pruebas es condición de desaprobación, pero su cumplimiento no es suficiente para la aprobación. Respetar las entradas de log planteadas en los ejercicios, pues son las que se chequean en cada uno de los tests.
 
 La corrección personal tendrá en cuenta la calidad del código entregado y casos de error posibles, se manifiesten o no durante la ejecución del trabajo práctico. Se pide a los alumnos leer atentamente y **tener en cuenta** los criterios de corrección informados  [en el campus](https://campusgrado.fi.uba.ar/mod/page/view.php?id=73393).
+
+## Ejecución y detalles de implementación
+
+### Ejercicio N°1:
+El script `generar-compose.sh` se encuentra en la raíz del proyecto y puede ser invocado de la siguiente manera:
+`./generar-compose.sh docker-compose-dev.yaml 5`
+
+Se creó un script en bash que llama a una subrutina en Python para generar el archivo docker-compose-dev.yaml con la cantidad de clientes especificada.
+
+### Ejercicio N°2:
+Para la ejecucion de este ejercicio hay que levantar con `make docker-compose-up` y luego modificar los archivos config.ini y config.yaml en la máquina host. Los cambios se verán reflejados en los contenedores sin necesidad de reconstruir las imágenes.
+
+Para este ejercicio se modificó el generador `generar-compose.sh` para que el volumen que contiene los archivos de configuración de cliente y servidor se monte desde la máquina host al contenedor.
+
+### Ejercicio N°3:
+Para la ejecución de este ejercicio, se debe levantar el servidor con `make docker-compose-up` y luego ejecutar el script `./validar-echo-server.sh`.
+En este ejercicio se creó un script en bash que utiliza un contenedor temporal de la imagen `busybox` para ejecutar el comando `netcat` y validar el funcionamiento del servidor sin necesidad de exponer puertos ni instalar nada en la máquina host, utilizando docker network.
+
+### Ejercicio N°4:
+Para la ejecución de este ejercicio, se debe levantar el servidor y el cliente con `make docker-compose-up`. Luego, se debe detener la ejecución con `make docker-compose-down`.
+Se agregó un manejador de señales en ambos programas para capturar la señal SIGTERM y cerrar los recursos abiertos de manera ordenada. Para el servidor por medio de signal y para el cliente por medio de channel.
+
+### Ejercicio N°5:
+Para la ejecución de este ejercicio, se debe levantar el servidor y los clientes con `make docker-compose-up` y luego observar los logs con `make docker-compose-logs`.
+
+En este ejercicio se implementó un protocolo de comunicación donde el cliente envía sus apuestas y el servidor las recibe y espera la respuesta del servidor. El servidor almacena las apuestas y responde al cliente con un mensaje de éxito o fallo según corresponda. Se utilizó un protocolo simple basado en saparadores, donde cada apuesta esta separada por un salto de línea y los campos dentro de cada apuesta están separados por `|`. Similar para el servidor el cual para enviar la respuesta al cliente utiliza el mismo protocolo, enviando `<documento>|<numero>\n`. Antes de eniar un mensaje se envia un entero de 2 bytes en big-endian que indica el tamaño del mensaje a enviar.
+
+### Ejercicio N°6:
+Para la ejecución de este ejercicio, se debe levantar el servidor y los clientes con `make docker-compose-up` y luego observar los logs con `make docker-compose-logs`.
+

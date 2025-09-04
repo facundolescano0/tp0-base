@@ -75,9 +75,9 @@ class Server:
 
     def send_response_batch(self, server_protocol, stored_count, amount_of_bets):
         if stored_count == amount_of_bets:
-            server_protocol.send_response_batch("success")
+            server_protocol.send_response_batch(server_protocol.BATCH_OK)
         else:
-            server_protocol.send_response_batch("fail")
+            server_protocol.send_response_batch(server_protocol.BATCH_FAIL)
 
     def __handle_client_connection(self, server_protocol):
         """
@@ -100,8 +100,10 @@ class Server:
                     logging.info(f"action: apuesta_recibida | result: fail | cantidad: {stored_count}")
                 self.send_response_batch(server_protocol, stored_count, amount_of_bets)
 
-        except OSError as e:
-            logging.error("action: receive_message | result: fail | error: {e}")
+        except OSError:
+            pass
+            # cliente terminó y cerró socket
+            # logging.error(f"action: receive_message | result: fail | error: {e}")
         finally:
             server_protocol.close()
 
