@@ -100,31 +100,25 @@ func (c *Client) recvResponseBet(client_protocol *ClientProtocol) {
 }
 
 // StartClientLoop Send messages to the client until some time threshold is met
-func (c *Client) StartClientLoop(done <-chan bool) {
+func (c *Client) StartClientLoop() {
 	// There is an autoincremental msgID to identify every message sent
 	// Messages if the message amount threshold has not been surpassed
 	for msgID := 1; msgID <= c.config.LoopAmount; msgID++ {
 		if !c.keepRunning {
 			break
 		}
-		select {
-		case <-done:
-			log.Infof("action: shutdown | result: success | client_id: %v", c.config.ID)
-			c.Shutdown()
-			return
-		default:
-			// Create the connection the server in every loop iteration. Send an
-			c.createClientSocket()
-			client_protocol := NewClientProtocol(c.conn)
-
-			c.sendBet(client_protocol)
-
-			c.recvResponseBet(client_protocol)
-
-			// Wait a time between sending one message and the next one
-			time.Sleep(c.config.LoopPeriod)
 	
-		}
+		// Create the connection the server in every loop iteration. Send an
+		c.createClientSocket()
+		client_protocol := NewClientProtocol(c.conn)
+
+		c.sendBet(client_protocol)
+
+		c.recvResponseBet(client_protocol)
+
+		// Wait a time between sending one message and the next one
+		time.Sleep(c.config.LoopPeriod)
+		
 	}
 	log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
 }

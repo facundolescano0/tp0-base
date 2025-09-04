@@ -52,15 +52,17 @@ class Server:
         client socket will also be closed
         """
         try:
-            id, name, lastname, nid, birth, number = self.recv_bet(server_protocol)
-
+            fields = self.recv_bet(server_protocol)
+            if not fields:
+                return  # o loguear y salir
+            id, name, lastname, nid, birth, number = fields
             bet = Bet(agency=id, first_name=name, last_name=lastname, document=nid, birthdate=birth, number=number)
             store_bets([bet])
             logging.info(f'action: apuesta_almacenada | result: success | dni: {nid} | numero: {number}')
             
             self.send_response_bet(server_protocol, nid, number)
 
-        except OSError as e:
+        except OSError:
             logging.error("action: receive_message | result: fail | error: {e}")
         finally:
             server_protocol.close()

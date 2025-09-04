@@ -34,7 +34,7 @@ func (cp *ClientProtocol) serializeBet(bet Bet) string {
 }
 
 func (cp *ClientProtocol) sendBetSize(size int) error {
-    buf := make([]byte, 2)
+    buf := make([]byte, SIZE)
     binary.BigEndian.PutUint16(buf, uint16(size))
     return cp.sendAllBytes(buf)
 }
