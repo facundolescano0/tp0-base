@@ -22,6 +22,7 @@ class Server:
         self._server_socket.listen(listen_backlog)
         self._keep_running = True
         self.clients_amount = clients_amount
+        self.draw_winners = {}
 
         self._lock = threading.Lock()
         self.agencies_sent_all = 0
@@ -63,8 +64,9 @@ class Server:
     def recv_batch(self, server_protocol):
         return server_protocol.recv_batch()
 
+
     def store_batch(self, batch):
-        stored_count = 0
+        bets = []
         for bet in batch:
             bet_obj = Bet(
                 agency=int(bet[self.IDX_AGENCY]),
@@ -74,27 +76,41 @@ class Server:
                 birthdate=bet[self.IDX_BIRTHDATE],
                 number=int(bet[self.IDX_NUMBER])
             )
-            try:
-                store_bets([bet_obj])
-                stored_count += 1
-            except Exception as e:
-                logging.error(f"action: store_batch | result: fail | error: {e}")
-        return stored_count
+            bets.append(bet_obj)
+        try:
+            # Store bets with lock
+            with self._lock:
+                store_bets(bets)
+        except Exception as e:
+            logging.error(f"action: store_batch | result: fail | error: {e}")
+            return False
+        return True
 
-    def send_response_batch(self, server_protocol, stored_count, amount_of_bets):
-        if stored_count == amount_of_bets:
+    def send_response_batch(self, server_protocol, batch_stored):
+        if batch_stored:
             server_protocol.send_response_batch(ServerProtocol.BATCH_OK)
         else:
             server_protocol.send_response_batch(ServerProtocol.BATCH_FAIL)
 
     def recv_winners_request(self, server_protocol):
         return server_protocol.recv_winners_request()
-
-
-    def send_winners(self, agency_id, server_protocol):
+    
+    def lottery(self):
         bets = load_bets()
-        winners = [bet.document for bet in bets if bet.agency == agency_id and has_won(bet)]
-        server_protocol.send_winners(winners)
+        draw_winners = {}
+        for bet in bets:
+            if has_won(bet):
+                logging.info(f"action: lottery | result: winner_found | agency: {bet.agency} | document: {bet.document} | number: {bet.number}")
+                if bet.agency not in draw_winners:
+                    draw_winners[bet.agency] = []
+                draw_winners[bet.agency].append(bet.document)
+        logging.info(f"action: lottery | result: success | winners: {draw_winners}")
+        self.draw_winners = draw_winners
+
+
+
+    def get_winners(self, agency_id):
+        return self.draw_winners.get(agency_id, [])
 
     def __handle_client_connection(self, server_protocol):
         """
@@ -119,23 +135,27 @@ class Server:
                         with self._lock:
                             self.agencies_sent_all += 1
                             ready = (self.agencies_sent_all == self.clients_amount)
-                        if ready:
-                            logging.info("action: sorteo | result: success")
+                            if ready:
+                                self.lottery()
+                                logging.info("action: sorteo | result: success")
                         break
-                    amount_of_bets = len(batch)
-                    stored_count = self.store_batch(batch)
-                    if stored_count == amount_of_bets:
+                    stored_count = len(batch)
+                    stored = self.store_batch(batch)
+                    if stored:
                          logging.info(f"action: apuesta_recibida | result: success | cantidad: {stored_count}")
                     else:
                          logging.info(f"action: apuesta_recibida | result: fail | cantidad: {stored_count}")
-                    self.send_response_batch(server_protocol, stored_count, amount_of_bets)
+                    self.send_response_batch(server_protocol, stored)
                     
                 elif opcode == ServerProtocol.WINNERS_REQUEST:
                     agency_id = server_protocol.recv_agency_id()
                     with self._lock:
                         ready = (self.agencies_sent_all == self.clients_amount)
+                        if ready:
+                            winners = self.get_winners(agency_id)
+                            logging.info(f"action: winners_request | result: success | agency_id: {agency_id} | winners: {winners}")
                     if ready:
-                        winners_sent = self.send_winners(agency_id, server_protocol)
+                        winners_sent = server_protocol.send_winners(winners)
                     else:
                         server_protocol.send_not_ready()
                     break

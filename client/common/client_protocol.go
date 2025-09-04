@@ -21,6 +21,7 @@ const (
     BATCH_FAIL = 4
     SEND_WINNERS = 5
     NOT_READY = 6
+    NO_WINNERS = 0
 
 )
 
@@ -164,7 +165,7 @@ func (cp *ClientProtocol) recvResponseWinners() ([]string, error) {
         return nil, fmt.Errorf("invalid winners size: %d", size)
     }
 
-	if size == 0 {
+	if size == NO_WINNERS {
 		return []string{}, nil
 	}
 
