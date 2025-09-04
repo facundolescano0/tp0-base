@@ -38,8 +38,7 @@ class Server:
                 server_protocol = ServerProtocol(self.client_sock, max_length=8192)
                 self.__handle_client_connection(server_protocol)
                 self.client_sock = None
-            
-
+        self.shutdown()
 
     def recv_bet(self, server_protocol):
         if campos := server_protocol.recv_bet():
@@ -79,22 +78,6 @@ class Server:
 
     def recv_winners_request(self, server_protocol):
         return server_protocol.recv_winners_request()
-    
-    def is_sort_done(self):
-        if len(self.agency_data) != self.clients_amount:
-            return False
-        if not all(data.finished_bets for data in self.agency_data.values()):
-            return False
-        return True
-    
-    def is_done(self):
-        if len(self.agency_data) != self.clients_amount:
-            return False
-        if not all(data.finished_bets for data in self.agency_data.values()):
-            return False
-        if not all(data.winners_sent for data in self.agency_data.values()):
-            return False
-        return True
 
     def make_draw(self):
         bets = load_bets()
@@ -151,9 +134,6 @@ class Server:
         except OSError as e:
             logging.error("action: receive_message | result: fail | error: {e}")
         finally:
-            if self.is_done():
-                self.shutdown()
-                return
             server_protocol.close()
 
     def __accept_new_connection(self):
