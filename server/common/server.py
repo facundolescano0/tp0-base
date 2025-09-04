@@ -1,6 +1,7 @@
 import socket
 import logging
 import errno
+import threading
 
 from .server_protocol import ServerProtocol
 from .utils import store_bets, Bet, load_bets, has_won
@@ -16,12 +17,16 @@ class Server:
     def __init__(self, port, listen_backlog, clients_amount):
         # Initialize server socket
         self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        # self._server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self._server_socket.bind(('', port))
         self._server_socket.listen(listen_backlog)
         self._keep_running = True
-        self.client_sock = None
-        self.agencies_sent_all = 0
         self.clients_amount = clients_amount
+
+        self._lock = threading.Lock()
+        self.agencies_sent_all = 0
+
+        self.client_threads = []
 
     def run(self):
         """
@@ -32,11 +37,18 @@ class Server:
         finishes, servers starts to accept new connections again
         """
         while self._keep_running:
-            self.client_sock = self.__accept_new_connection()
-            if self.client_sock:
-                server_protocol = ServerProtocol(self.client_sock, max_length=8192)
-                self.__handle_client_connection(server_protocol)
-                self.client_sock = None
+            try:
+                client_sock = self.__accept_new_connection()
+                if client_sock:
+                    server_protocol = ServerProtocol(client_sock, max_length=8192)
+
+                    t = threading.Thread( target=self.__handle_client_connection, args=(server_protocol,))
+                    self.client_threads.append((t, server_protocol))
+                    t.start()
+            except OSError as e:
+                if e.errno == errno.EBADF:
+                    break
+
         self.shutdown()
 
     def recv_bet(self, server_protocol):
@@ -104,8 +116,10 @@ class Server:
                         # # self.shutdown()
                         # break
                     if batch == ServerProtocol.BATCH_FINISHED:
-                        self.agencies_sent_all += 1
-                        if self.agencies_sent_all == self.clients_amount:
+                        with self._lock:
+                            self.agencies_sent_all += 1
+                            ready = (self.agencies_sent_all == self.clients_amount)
+                        if ready:
                             logging.info("action: sorteo | result: success")
                         break
                     amount_of_bets = len(batch)
@@ -118,8 +132,9 @@ class Server:
                     
                 elif opcode == ServerProtocol.WINNERS_REQUEST:
                     agency_id = server_protocol.recv_agency_id()
-                    
-                    if self.agencies_sent_all == self.clients_amount:
+                    with self._lock:
+                        ready = (self.agencies_sent_all == self.clients_amount)
+                    if ready:
                         winners_sent = self.send_winners(agency_id, server_protocol)
                     else:
                         server_protocol.send_not_ready()
@@ -150,6 +165,12 @@ class Server:
 
     def shutdown(self):
         self._keep_running = False
-        if self.client_sock:
-            self.client_sock.close()
-        self._server_socket.close()
+
+        try:
+            for t, server_protocol in self.client_threads:
+                server_protocol.close()
+                t.join()
+            self._server_socket.close()
+            logging.info("action: shutdown | result: success ")
+        except Exception as e:
+            logging.error(f'action: shutdown | result: fail | error: {e}')
