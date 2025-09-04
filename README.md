@@ -178,3 +178,45 @@ Se espera que se redacte una sección del README en donde se indique cómo ejecu
 Se proveen [pruebas automáticas](https://github.com/7574-sistemas-distribuidos/tp0-tests) de caja negra. Se exige que la resolución de los ejercicios pase tales pruebas, o en su defecto que las discrepancias sean justificadas y discutidas con los docentes antes del día de la entrega. El incumplimiento de las pruebas es condición de desaprobación, pero su cumplimiento no es suficiente para la aprobación. Respetar las entradas de log planteadas en los ejercicios, pues son las que se chequean en cada uno de los tests.
 
 La corrección personal tendrá en cuenta la calidad del código entregado y casos de error posibles, se manifiesten o no durante la ejecución del trabajo práctico. Se pide a los alumnos leer atentamente y **tener en cuenta** los criterios de corrección informados  [en el campus](https://campusgrado.fi.uba.ar/mod/page/view.php?id=73393).
+
+## Ejecución y detalles de implementación
+
+### Ejercicio N°1:
+El script `generar-compose.sh` se encuentra en la raíz del proyecto y puede ser invocado de la siguiente manera:
+`./generar-compose.sh docker-compose-dev.yaml 5`
+
+Se creó un script en bash que llama a una subrutina en Python para generar el archivo docker-compose-dev.yaml con la cantidad de clientes especificada.
+
+### Ejercicio N°2:
+Para la ejecucion de este ejercicio hay que levantar con `make docker-compose-up` y luego modificar los archivos config.ini y config.yaml en la máquina host. Los cambios se verán reflejados en los contenedores sin necesidad de reconstruir las imágenes.
+
+Para este ejercicio se modificó el generador `generar-compose.sh` para que el volumen que contiene los archivos de configuración de cliente y servidor se monte desde la máquina host al contenedor.
+
+### Ejercicio N°3:
+Para la ejecución de este ejercicio, se debe levantar el servidor con `make docker-compose-up` y luego ejecutar el script `./validar-echo-server.sh`.
+En este ejercicio se creó un script en bash que utiliza un contenedor temporal de la imagen `busybox` para ejecutar el comando `netcat` y validar el funcionamiento del servidor sin necesidad de exponer puertos ni instalar nada en la máquina host, utilizando docker network.
+
+### Ejercicio N°4:
+Para la ejecución de este ejercicio, se debe levantar el servidor y el cliente con `make docker-compose-up`. Luego, se debe detener la ejecución con `make docker-compose-down`.
+Se agregó un manejador de señales en ambos programas para capturar la señal SIGTERM y cerrar los recursos abiertos de manera ordenada. Para el servidor por medio de signal y para el cliente por medio de channel.
+
+### Ejercicio N°5:
+Para la ejecución de este ejercicio, se debe levantar el servidor y los clientes con `make docker-compose-up` y luego observar los logs con `make docker-compose-logs`.
+
+En este ejercicio se implementó un protocolo de comunicación donde el cliente envía sus apuestas y el servidor las recibe y espera la respuesta del servidor. El servidor almacena las apuestas y responde al cliente con un mensaje de éxito o fallo según corresponda. Se utilizó un protocolo simple basado en saparadores, donde cada apuesta esta separada por un salto de línea y los campos dentro de cada apuesta están separados por `|`. Similar para el servidor el cual para enviar la respuesta al cliente utiliza el mismo protocolo, enviando `<documento>|<numero>\n`. Antes de eniar un mensaje se envia un entero de 2 bytes en big-endian que indica el tamaño del mensaje a enviar.
+
+### Ejercicio N°6:
+Para la ejecución de este ejercicio, se debe levantar el servidor y los clientes con `make docker-compose-up` y luego observar los logs con `make docker-compose-logs`.
+
+En este ejercicio se modificó el cliente para que reciba por docker volumes el archivo de apuesta correspondiente y se armó la logica de ir leyendo el archivo hasta llenar un batch (ya sea por maxima cantidad de apuestas o por limite de bytes) y enviarlo al servidor. El protocolo utilizado fue casi el mismo que en el ejercicio 5. La condicion de corte de este ejercicio es por medio de un cierre de sockets del cliente, el servidor detecta el cierre y sale del loop.
+
+## Ejercicio N°7:
+Para la ejecución de este ejercicio, se debe levantar el servidor y los clientes con `make docker-compose-up` y luego observar los logs con `make docker-compose-logs`.
+En este ejercicio, a diferencia del anterior, cada agencia al terminar con su apuestas envía un ACK. El servidor espera a recibir los acks, segun la cantidad de agencias que haya (variable de entorno CLIENTS_AMOUNT). Luego el servidor realiza el sorteo y guarda los ganadores. Cada cliente luego de enviar su ACK, consulta por los ganadores y el servidor responde con los DNIs ganadores correspondientes a la agencia. En caso de que todavia no se haya realizado el sorteo, el servidor responde que no se realizó y desconecta al cliente. Este vuelve a conectarse e intenta consultar nuevamente hasta que el sorteo se haya realizado.
+El protocolo utilizado es similar a los usados anteriormente, pero se agregaron comandos para diferenciar los tipos de mensajes. Con lo cual el formato de los mensajes es: 1 byte para el comando, 2 bytes para el tamaño y luego el payload. 
+
+### Ejercicio N°8:
+Para la ejecución de este ejercicio, se debe levantar el servidor y los clientes con `make docker-compose-up` y luego observar los logs con `make docker-compose-logs`.
+
+En este ejercicio, se modificó el servidor para que acepte conexiones y procese mensajes en paralelo utilizando multithreading. El hilo principal acepta conexiones y por cada conexión crea un nuevo hilo que se encarga de manejar la comunicación con el cliente. Dado que la mayor parte del trabajo es I/O (ya que implica esperar respuestas de los clientes y recibir datos de la red) y no procesamiento intensivo, las limitaciones del GIL no afectan el funcionamiento esperado en este contexto
+Se utilizó un Lock para sincronizar el acceso al contador de agencias que terminaron de enviar sus apuestas, al momento de almacenar las apuestas, al momento de realizar el sorteo y al momento de consultar las apuestas para verificar los ganadores de determinada agencia.
