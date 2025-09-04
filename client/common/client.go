@@ -162,7 +162,7 @@ func (c *Client) processWinnersResponse(response []string) int {
 	return len(response)
 }
 
-func (c *Client) send_batch_loop(scanner *bufio.Scanner, done <-chan bool) error {
+func (c *Client) send_batch_loop(scanner *bufio.Scanner) error {
 
 	last_bet := Bet{}
 	var i int = 0
@@ -191,42 +191,35 @@ func (c *Client) send_batch_loop(scanner *bufio.Scanner, done <-chan bool) error
 				batches_finished = true
 			}
 		}
-		select {
-		case <-done:
-			log.Infof("action: shutdown | result: success | client_id: %v", c.config.ID)
-			c.Shutdown()
-			return nil
-		default:
-
-			err = c.clientProtocol.sendBatch(batch)
-			if err != nil {
-				log.Errorf("action: send_message | result: fail | client_id: %v | error: %v",
-					c.config.ID,
-					err,
-				)
-				return err
-			}
-
-			if batches_finished {
-				break
-			}
-
-			_, err := c.clientProtocol.recvResponseBatch()
-			if err != nil {
-				log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v",
-					c.config.ID,
-					err,
-				)
-				return err
-			}
-			// Wait a time between sending one message and the next one
-			// time.Sleep(c.config.LoopPeriod)
+		err = c.clientProtocol.sendBatch(batch)
+		if err != nil {
+			log.Errorf("action: send_message | result: fail | client_id: %v | error: %v",
+				c.config.ID,
+				err,
+			)
+			return err
 		}
+
+		if batches_finished {
+			break
+		}
+
+		_, err = c.clientProtocol.recvResponseBatch()
+		if err != nil {
+			log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v",
+				c.config.ID,
+				err,
+			)
+			return err
+		}
+		// Wait a time between sending one message and the next one
+		// time.Sleep(c.config.LoopPeriod)
+		
 	}
 	return nil
 }
 
-func (c *Client) recv_winners(done <-chan bool) error {
+func (c *Client) recv_winners() error {
 	agencyID, err := strconv.Atoi(c.config.ID)
 	if err != nil {
 		log.Errorf("action: connect | result: fail | client_id: %v | error: %v",
@@ -238,51 +231,46 @@ func (c *Client) recv_winners(done <-chan bool) error {
 
 	var response_result = []string{}
 	for len(response_result) == 0 {
-		select {
-		case <-done:
-			log.Infof("action: shutdown | result: success | client_id: %v", c.config.ID)
-			c.Shutdown()
-			return nil
-		default:
-			c.try_connect()
+	
+		c.try_connect()
 
-			if c.clientProtocol != nil {
-				err = c.clientProtocol.sendWinnersRequest(agencyID)
-				if err != nil {
-					log.Errorf("action: consulta_ganadores | result: fail | client_id: %v | error: %v",
-						c.config.ID,
-						err,
-					)
-					c.closeConn()
-					return err
-				}
-
-				response_result, err = c.clientProtocol.recvResponseWinners()
-				if err != nil {
-					log.Errorf("action: receive_winners | result: fail | client_id: %v | error: %v",
-						c.config.ID,
-						err,
-					)
-					c.closeConn()
-					return err
-				}
-				if response_result != nil {
-					amount_winners := c.processWinnersResponse(response_result)
-					log.Infof("action: consulta_ganadores | result: success | cant_ganadores: %d", amount_winners)
-					c.Shutdown()
-					return nil
-				}
+		if c.clientProtocol != nil {
+			err = c.clientProtocol.sendWinnersRequest(agencyID)
+			if err != nil {
+				log.Errorf("action: consulta_ganadores | result: fail | client_id: %v | error: %v",
+					c.config.ID,
+					err,
+				)
+				c.closeConn()
+				return err
 			}
 
-			c.closeConn()
-    		time.Sleep(TIME_TO_RETRY * time.Second)
+			response_result, err = c.clientProtocol.recvResponseWinners()
+			if err != nil {
+				log.Errorf("action: receive_winners | result: fail | client_id: %v | error: %v",
+					c.config.ID,
+					err,
+				)
+				c.closeConn()
+				return err
+			}
+			if response_result != nil {
+				amount_winners := c.processWinnersResponse(response_result)
+				log.Infof("action: consulta_ganadores | result: success | cant_ganadores: %d", amount_winners)
+				c.Shutdown()
+				return nil
+			}
 		}
+
+		c.closeConn()
+		time.Sleep(TIME_TO_RETRY * time.Second)
+		
 	}
 	return nil
 }
 
 // StartClientLoop Send messages to the client until some time threshold is met
-func (c *Client) StartClientLoop(done <-chan bool) error {
+func (c *Client) StartClientLoop() error {
 
 	err := c.try_connect()
 	if err != nil {
@@ -306,11 +294,11 @@ func (c *Client) StartClientLoop(done <-chan bool) error {
 
     scanner := bufio.NewScanner(file)
 
-	c.send_batch_loop(scanner, done)
+	c.send_batch_loop(scanner)
 
 	c.closeConn()
 
-	c.recv_winners(done)
+	c.recv_winners()
 
 	return nil
 }

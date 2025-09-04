@@ -11,6 +11,7 @@ const (
     BATCH_FINISHED = 0
     ONE_BYTE = 1
     SIZE = 2
+	EMPTY = ""
    
     // client to server
     BATCH = 1
@@ -65,7 +66,7 @@ func (cp *ClientProtocol) sendOpCode(opCode int) error {
 }
 
 func (cp *ClientProtocol) sendBatchSize(size int) error {
-    buf := make([]byte, 2)
+    buf := make([]byte, SIZE)
     binary.BigEndian.PutUint16(buf, uint16(size))
     return cp.sendAllBytes(buf)
 }
@@ -181,7 +182,7 @@ func (cp *ClientProtocol) recvResponseWinners() ([]string, error) {
     // payload = strings.TrimSuffix(payload, "|")
     parts := strings.Split(payload, "|")
 	
-	if len(parts) == 1 && parts[0] == "" {
+	if len(parts) == 1 && parts[0] == EMPTY {
         return []string{}, nil
     }
 

@@ -42,8 +42,8 @@ class Server:
         self.shutdown()
 
     def recv_bet(self, server_protocol):
-        if campos := server_protocol.recv_bet():
-            return campos
+        if fields := server_protocol.recv_bet():
+            return fields
         logging.error("action: receive_message | result: fail | error: formato de mensaje incorrecto")
         return None
 
@@ -139,7 +139,7 @@ class Server:
                 else:
                     logging.error(f"action: receive_message | result: fail | error: unexpected opcode: {opcode}")
         except OSError as e:
-            logging.error("action: receive_message | result: fail | error: {e}")
+            logging.error(f"action: receive_message | result: fail | error: {e}")
         finally:
             server_protocol.close()
 
@@ -158,7 +158,8 @@ class Server:
             logging.info(f'action: accept_connections | result: success | ip: {addr[0]}')
             return c
         except OSError as e:
-            logging.error(f'action: accept_connections | result: fail | error: {e}')
+            return None
+            # logging.error(f'action: accept_connections | result: fail | error: {e}')
 
     def shutdown(self):
         self._keep_running = False
