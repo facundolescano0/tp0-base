@@ -65,7 +65,7 @@ func (cp *ClientProtocol) sendOpCode(opCode int) error {
 }
 
 func (cp *ClientProtocol) sendBatchSize(size int) error {
-    buf := make([]byte, 2)
+    buf := make([]byte, SIZE)
     binary.BigEndian.PutUint16(buf, uint16(size))
     return cp.sendAllBytes(buf)
 }
@@ -108,15 +108,11 @@ func (cp *ClientProtocol) sendWinnersRequest(id int) error {
 }
 
 func (cp *ClientProtocol) recvOpCode() (int, error) {
-    buf := make([]byte, ONE_BYTE)
-    total := 0
-    for total < ONE_BYTE {
-        n, err := cp.conn.Read(buf[total:])
-        if err != nil {
-            return 0, err
-        }
-        total += n
-    }
+    size := ONE_BYTE
+	buf, err := cp.recvAll(size)
+	if err != nil {
+		return 0, err
+	}
     return int(buf[0]), nil
 }
 
@@ -132,14 +128,10 @@ func (cp *ClientProtocol) recvResponseBatch() (int, error) {
 }
 
 func (cp *ClientProtocol) recvSizeMsg () (int, error) {
-	buf := make([]byte, SIZE)
-	total := 0
-	for total < SIZE {
-		n, err := cp.conn.Read(buf[total:])
-		if err != nil {
-			return 0, err
-		}
-		total += n
+	size := SIZE
+	buf, err := cp.recvAll(size)
+	if err != nil {
+		return 0, err
 	}
 	return int(binary.BigEndian.Uint16(buf)), nil
 }
@@ -169,13 +161,10 @@ func (cp *ClientProtocol) recvResponseWinners() ([]string, error) {
 		return []string{}, nil
 	}
 
-    buf := make([]byte, size)
-    total := 0
-    for total < size {
-        n, err := cp.conn.Read(buf[total:])
-        if err != nil { return nil, err }
-        total += n
-    }
+    buf, err := cp.recvAll(size)
+	if err != nil {
+		return nil, err
+	}
 
     payload := string(buf)
     // payload = strings.TrimSuffix(payload, "|")
@@ -186,4 +175,15 @@ func (cp *ClientProtocol) recvResponseWinners() ([]string, error) {
     }
 
     return parts, nil
+}
+
+func (cp *ClientProtocol) recvAll(size int) ([]byte, error) {
+	buf := make([]byte, size)
+    total := 0
+    for total < size {
+        n, err := cp.conn.Read(buf[total:])
+        if err != nil { return nil, err }
+        total += n
+    }
+	return buf, nil
 }
