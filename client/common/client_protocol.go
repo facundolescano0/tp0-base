@@ -72,10 +72,9 @@ func (cp *ClientProtocol) sendBatchSize(size int) error {
 
 func (cp *ClientProtocol) sendBatch(batch []Bet) error {
 	if len(batch) == 0 {
-        if err := cp.sendOpCode(BATCH); err != nil {
-            return err
-        }
-        return cp.sendBatchSize(BATCH_FINISHED) 
+        if err := cp.sendOpCode(BATCH); err != nil { return err }
+        
+		return cp.sendBatchSize(BATCH_FINISHED)
     }
 	
 	var msg strings.Builder
@@ -110,17 +109,15 @@ func (cp *ClientProtocol) sendWinnersRequest(id int) error {
 func (cp *ClientProtocol) recvOpCode() (int, error) {
     size := ONE_BYTE
 	buf, err := cp.recvAll(size)
-	if err != nil {
-		return 0, err
-	}
+	if err != nil { return 0, err }
+
     return int(buf[0]), nil
 }
 
 func (cp *ClientProtocol) recvResponseBatch() (int, error) {
 	batchResponse, err := cp.recvOpCode()
-	if err != nil {
-		return 0, err
-	}
+	if err != nil { return 0, err }
+
 	if batchResponse != BATCH_OK && batchResponse != BATCH_FAIL {
 		return 0, fmt.Errorf("unexpected batch response: %d", batchResponse)
 	}
@@ -130,49 +127,33 @@ func (cp *ClientProtocol) recvResponseBatch() (int, error) {
 func (cp *ClientProtocol) recvSizeMsg () (int, error) {
 	size := SIZE
 	buf, err := cp.recvAll(size)
-	if err != nil {
-		return 0, err
-	}
+	if err != nil { return 0, err }
+
 	return int(binary.BigEndian.Uint16(buf)), nil
 }
 
 func (cp *ClientProtocol) recvResponseWinners() ([]string, error) {
 	recvOpCode, err := cp.recvOpCode()
-	if err != nil {
-		return nil, err
-	}
-	if recvOpCode == NOT_READY {
-		return nil, nil
-	}
-	if recvOpCode != SEND_WINNERS {
-		return nil, fmt.Errorf("unexpected opcode: %d", recvOpCode)
-	}
+	if err != nil { return nil, err }
+	
+	if recvOpCode == NOT_READY { return nil, nil }
+
+	if recvOpCode != SEND_WINNERS { return nil, fmt.Errorf("unexpected opcode: %d", recvOpCode) }
 
 	size, err := cp.recvSizeMsg()
-    if err != nil {
-        return nil, err
-    }
+    if err != nil { return nil, err }
 
-	if size < 0 || size > cp.maxLength {
-        return nil, fmt.Errorf("invalid winners size: %d", size)
-    }
+	if size < 0 || size > cp.maxLength { return nil, fmt.Errorf("invalid winners size: %d", size) }
 
-	if size == NO_WINNERS {
-		return []string{}, nil
-	}
+	if size == NO_WINNERS { return []string{}, nil }
 
     buf, err := cp.recvAll(size)
-	if err != nil {
-		return nil, err
-	}
+	if err != nil { return nil, err }
 
     payload := string(buf)
-    // payload = strings.TrimSuffix(payload, "|")
     parts := strings.Split(payload, "|")
 	
-	if len(parts) == 1 && parts[0] == "" {
-        return []string{}, nil
-    }
+	if len(parts) == 1 && parts[0] == "" { return []string{}, nil }
 
     return parts, nil
 }

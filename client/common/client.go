@@ -19,6 +19,7 @@ const (
     BirthdateIdx
     NumberIdx
 	TIME_TO_RETRY = 5
+	BET_FIELDS = 5
 )
 
 var log = logging.MustGetLogger("log")
@@ -103,11 +104,10 @@ func (c *Client) try_connect() error {
 func (c *Client) splitBet(line string) (Bet, error) {
 	record := strings.Split(line, ",")
 	
-	if len(record) != 5 {
-		log.Errorf("action: load_bets | result: fail | client_id: %v | error: carga de archivo",
-			c.config.ID,
-		)
-		return Bet{}, fmt.Errorf("invalid record length")
+	if len(record) != BET_FIELDS {
+		err := fmt.Errorf("invalid record length")
+		c.loggingError("load_bets", err)
+		return Bet{}, err
 	}
 	bet := Bet{
 		Agency:    c.config.ID,
@@ -132,10 +132,7 @@ func (c *Client) LoadBatchfromfile(scanner *bufio.Scanner, lastBet Bet) ([]Bet, 
 		line := scanner.Text()
 		bet, err := c.splitBet(line)
 		if err != nil {
-			log.Errorf("action: load_bets | result: fail | client_id: %v | error: %v",
-				c.config.ID,
-				err,
-			)
+			c.loggingError("load_bets", err)
 			return nil, Bet{}, fmt.Errorf("failed to split bet: %v", err)
 		}
 		betStr := c.clientProtocol.serializeBet(bet)
@@ -161,21 +158,22 @@ func (c *Client) processWinnersResponse(response []string) int {
 	return len(response)
 }
 
+func (c *Client) loggingError(action string, err error) {
+	log.Errorf("action: %s | result: fail | client_id: %v | error: %v",
+		action,
+		c.config.ID,
+		err,
+	)
+} 
+
 func (c *Client) send_batch_loop(scanner *bufio.Scanner) error {
 
 	last_bet := Bet{}
-	var i int = 0
 	var batches_finished bool = false
+
 	for c.keepRunning && !batches_finished {
-		i += 1
 		batch, next_last_bet, err := c.LoadBatchfromfile(scanner, last_bet)
-		if err != nil {
-			log.Errorf("action: load_bets | result: fail | client_id: %v | error: %v",
-				c.config.ID,
-				err,
-			)
-			return err
-		}
+		if err != nil { c.loggingError("load_bets", err); return err }
 
 		last_bet = next_last_bet
 
@@ -184,7 +182,6 @@ func (c *Client) send_batch_loop(scanner *bufio.Scanner) error {
 			if last_bet != (Bet{}) {
             	batch = []Bet{last_bet}
 				last_bet = Bet{}
-
 			} else {
 				// If there are no more bets to process, we can finish
 				batches_finished = true
@@ -192,79 +189,58 @@ func (c *Client) send_batch_loop(scanner *bufio.Scanner) error {
 		}
 
 		err = c.clientProtocol.sendBatch(batch)
-		if err != nil {
-			log.Errorf("action: send_message | result: fail | client_id: %v | error: %v",
-				c.config.ID,
-				err,
-			)
-			return err
-		}
+		if err != nil { c.loggingError("send_batch", err); return err }
 
 		if batches_finished {
+			// all batches sent
 			break
 		}
 
 		_, err = c.clientProtocol.recvResponseBatch()
-		if err != nil {
-			log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v",
-				c.config.ID,
-				err,
-			)
-			return err
-		}
+		if err != nil { c.loggingError("receive_batch_response", err); return err }
 		// Wait a time between sending one message and the next one
 		// time.Sleep(c.config.LoopPeriod)
-	
 	}
 	return nil
 }
 
 func (c *Client) recv_winners() error {
 	agencyID, err := strconv.Atoi(c.config.ID)
-	if err != nil {
-		log.Errorf("action: connect | result: fail | client_id: %v | error: %v",
-			c.config.ID,
-			err,
-		)
-		return err
-	}
+	if err != nil { c.loggingError("convert_agency_id", err); return err }
 
 	var response_result = []string{}
 	for len(response_result) == 0 {
 
 		c.try_connect()
 
-		if c.clientProtocol != nil {
-			err = c.clientProtocol.sendWinnersRequest(agencyID)
-			if err != nil {
-				log.Errorf("action: consulta_ganadores | result: fail | client_id: %v | error: %v",
-					c.config.ID,
-					err,
-				)
-				c.closeConn()
-				return err
-			}
-
-			response_result, err = c.clientProtocol.recvResponseWinners()
-			if err != nil {
-				log.Errorf("action: receive_winners | result: fail | client_id: %v | error: %v",
-					c.config.ID,
-					err,
-				)
-				c.closeConn()
-				return err
-			}
-			if response_result != nil {
-				amount_winners := c.processWinnersResponse(response_result)
-				log.Infof("action: consulta_ganadores | result: success | cant_ganadores: %d", amount_winners)
-				c.Shutdown()
-				return nil
-			}
+		if c.clientProtocol == nil {
+			// if connection or protocol failed, wait and retry
+			c.closeConn(); time.Sleep(TIME_TO_RETRY * time.Second)
+			continue
+		}
+		
+		err = c.clientProtocol.sendWinnersRequest(agencyID)
+		if err != nil {
+			c.loggingError("send_winners_request", err)
+			c.closeConn()
+			return err
 		}
 
+		response_result, err = c.clientProtocol.recvResponseWinners()
+		if err != nil {
+			c.loggingError("receive_winners_response", err)
+			c.closeConn()
+			return err
+		}
+		if response_result != nil {
+			amount_winners := c.processWinnersResponse(response_result)
+			log.Infof("action: consulta_ganadores | result: success | cant_ganadores: %d", amount_winners)
+			c.Shutdown()
+			return nil
+		}
+	
 		c.closeConn()
-		time.Sleep(TIME_TO_RETRY * time.Second)
-		
+		time.Sleep(TIME_TO_RETRY * time.Second)	
 	}
 	return nil
 }
@@ -273,27 +249,15 @@ func (c *Client) recv_winners() error {
 func (c *Client) StartClientLoop() error {
 
 	err := c.try_connect()
-	if err != nil {
-		return err
-	}
+	if err != nil { return err }
 
-	if c.conn == nil {
-		log.Errorf("action: connect | result: fail | client_id: %v | error: no se pudo conectar",
-			c.config.ID,
-		)
-		return nil
-	}
-
+	if c.conn == nil { c.loggingError("connect", fmt.Errorf("connection is nil")); return nil }
 
 	file, err := os.Open(c.config.AgencyPath)
-    if err != nil {
-        log.Errorf("Error opening file: %v\n", err)
-        return err
-    }
-    defer file.Close() 
+    if err != nil { c.loggingError("open_agency_file", err); return err }
+    defer file.Close()
 
     scanner := bufio.NewScanner(file)
-
 	c.send_batch_loop(scanner)
 
 	c.closeConn()

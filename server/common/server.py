@@ -17,7 +17,6 @@ class Server:
     def __init__(self, port, listen_backlog, clients_amount):
         # Initialize server socket
         self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        # self._server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self._server_socket.bind(('', port))
         self._server_socket.listen(listen_backlog)
         self._keep_running = True
@@ -125,11 +124,8 @@ class Server:
 
                 if opcode == ServerProtocol.BATCH:
                     batch = self.recv_batch(server_protocol)
-                    # if not batch:
-                        # logging.info(f"action: receive_message | result: fail | error: batch nill")
-                        # # self.shutdown()
-                        # break
                     if batch == ServerProtocol.BATCH_FINISHED:
+                        # All batches received from an agency
                         with self._lock:
                             self.agencies_sent_all += 1
                             ready = (self.agencies_sent_all == self.clients_amount)
@@ -137,6 +133,7 @@ class Server:
                                 self.lottery()
                                 logging.info("action: sorteo | result: success")
                         break
+
                     stored_count = len(batch)
                     stored = self.store_batch(batch)
                     if stored:
